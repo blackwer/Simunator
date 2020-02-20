@@ -60,6 +60,22 @@ else:
 
     parammaker = ParamMaker()
     parammaker.fromParamMakers(*[ParamMaker(dist) for dist in inputdata["dists"]])
-    res = [tuple(flatten(tup)) for tup in parammaker.items()]
+    psets = [tuple(flatten(tup)) for tup in parammaker.items()]
 
-    print(res)
+
+templatestrs = {}
+for fname in inputdata["system"]["templates"]:
+    with open(fname) as f:
+        templatestrs[fname] = f.read()
+
+for pset in psets:
+    paramdict = {}
+    for key, val in zip(parammaker._params, pset):
+        paramdict[key] = val
+
+    simpath = inputdata["system"]["pathstring"].format(**paramdict)
+    import os
+
+    for fname, templatestr in templatestrs.items():
+        print(os.path.join(simpath, fname))
+        print(templatestr.format(**paramdict))
