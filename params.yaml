@@ -1,27 +1,23 @@
 
 dists:
+  # - RandUniform:
+  #     samples: 2
+  #     params:
+  #       kappa:
+  #         bounds: [0, 1]
+  #         shortname: k
+
+  #       sigma:
+  #         bounds: [0, 20]
+  #         shortname: s
+
   - RandUniform:
-      samples: 1
+      samples: 11
       params:
-        kappa:
+        J:
           bounds: [0, 1]
-          shortname: k
-
-        sigma:
-          bounds: [0, 20]
-          shortname: s
-
-  - Uniform:
-      samples: 5
-      params:
-        dummy:
-          shortname: d
-          bounds: [0, 1]
-
-        dummy2:
-          shortname: d2
-          bounds: [0, 5]
 
 system:
-  templates: ['template.txt', 'template2.txt']
-  pathstring: 'k#{kappa:.4f}_s#{sigma:.4f}_d1#{dummy}_d2#{dummy2}'
+  templates: ['ising.py']
+  pathstring: 'sims/J#{J:.6f}'
+  cmd: 'python ./ising.py'
