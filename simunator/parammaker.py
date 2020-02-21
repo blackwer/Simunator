@@ -11,30 +11,30 @@ class ParamMaker:
             self._disttype = list(indist.keys())[0]
             self._params = indist[self._disttype]["params"]
             self._samples = indist[self._disttype]["samples"]
-            self.buildGenerator()
+            self.build_generator()
 
     @classmethod
-    def fromParamMakers(self, *args):
+    def from_param_makers(self, *args):
         self._disttype = "Combo"
         self._params = self.flatten([pm._params for pm in args])
         self._generator = it.product(*[pm._generator for pm in args])
         return self
 
-    def buildGenerator(self):
+    def build_generator(self):
         if self._disttype == "RandUniform":
-            self._generator = self.randUniform(
+            self._generator = self.rand_uniform(
                 [val["bounds"] for param, val in self._params.items()], self._samples
             )
         elif self._disttype == "Uniform":
-            self._generator = self.linUniform(
+            self._generator = self.lin_uniform(
                 [val["bounds"] for param, val in self._params.items()], self._samples
             )
 
-    def randUniform(self, bounds, N):
+    def rand_uniform(self, bounds, N):
         for i in range(0, N):
             yield [np.random.uniform(*bound) for bound in bounds]
 
-    def linUniform(self, bounds, N):
+    def lin_uniform(self, bounds, N):
         for i in range(0, N):
             point = []
             for bound in bounds:

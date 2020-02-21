@@ -10,7 +10,7 @@ else:
         inputdata = yaml.load(f, Loader=yaml.FullLoader)
 
     pmaker = ParamMaker()
-    pmaker.fromParamMakers(*[ParamMaker(dist) for dist in inputdata["dists"]])
+    pmaker.from_param_makers(*[ParamMaker(dist) for dist in inputdata["dists"]])
     psets = [tuple(pmaker.flatten(tup)) for tup in pmaker.items()]
 
 
