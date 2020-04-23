@@ -10,7 +10,8 @@ class ParamMaker:
         if indist:
             self._disttype = list(indist.keys())[0]
             self._params = indist[self._disttype]["params"]
-            self._samples = indist[self._disttype]["samples"]
+            if "samples" in indist[self._disttype]:
+                self._samples = indist[self._disttype]["samples"]
             self.build_generator()
 
     @classmethod
@@ -23,12 +24,15 @@ class ParamMaker:
     def build_generator(self):
         if self._disttype == "RandUniform":
             self._generator = self.rand_uniform(
-                [val["bounds"] for param, val in self._params.items()], self._samples
+                [val["bounds"] for _, val in self._params.items()], self._samples
             )
         elif self._disttype == "Uniform":
             self._generator = self.lin_uniform(
-                [val["bounds"] for param, val in self._params.items()], self._samples
+                [val["bounds"] for _, val in self._params.items()], self._samples
             )
+        elif self._disttype == "ItemizedList":
+            param = list(self._params.keys())[0]
+            self._generator = ([el] for el in self._params[param])
 
     def rand_uniform(self, bounds, N):
         for i in range(0, N):
@@ -41,6 +45,9 @@ class ParamMaker:
                 slope = 0 if N == 1 else (bound[1] - bound[0]) / (N - 1)
                 point.append(bound[0] + slope * i)
             yield point
+
+    def itemized_list(self, inlist):
+        return (el for el in inlist)
 
     @staticmethod
     def flatten(l):
