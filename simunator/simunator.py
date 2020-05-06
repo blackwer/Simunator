@@ -19,6 +19,7 @@ list.
     return pmaker, psets
 
 def gen_template_strings(inputconfig):
+    """Generates template strings database from list of input templates."""
     templatestrs = {}
     template_joined = ""
     for fname in inputconfig["system"]["templates"]:
@@ -33,18 +34,23 @@ def gen_template_strings(inputconfig):
     return templatestrs, template_joined
 
 def get_db(dbname):
+    """Opens or creates sqlite3 database that contains simulation information for faithful
+    reproduction of simulation run information.
+    """
     conn = sqlite3.connect(dbname)
     c = conn.cursor()
     c.execute(
-        """CREATE TABLE IF NOT EXISTS simunator_runsets (
+
+    """CREATE TABLE IF NOT EXISTS simunator_runsets (
                         time TEXT, cmdtemplate TEXT,
                         pathstring TEXT, templatestr TEXT
                  );"""
     )
-    
+
     return c, conn
 
 def add_set_to_db(c, currtime, inputconfig, template_joined, pmaker, psets):
+    """Adds system information to database and create table that holds the unique combinations of param:value pairs."""
     c.execute(
         """INSERT INTO simunator_runsets VALUES ( ?, ?, ?, ? );""",
         (
@@ -54,7 +60,7 @@ def add_set_to_db(c, currtime, inputconfig, template_joined, pmaker, psets):
             template_joined,
         ),
     )
-    
+
     paramstr = ""
     for param, valexample in zip(pmaker._params, psets[0]):
         if isinstance(valexample, str):
@@ -67,6 +73,7 @@ def add_set_to_db(c, currtime, inputconfig, template_joined, pmaker, psets):
 
 
 def create_sims(c, currtime, psets, templatestrs):
+    """Write simulation information to disk for actual running."""
     currpath = os.getcwd()
     sim_keywords = {"SIM_DATE": currtime}
     for pset in psets:
@@ -97,8 +104,8 @@ def create_sims(c, currtime, psets, templatestrs):
                                     paramdict.values()))
         )
         c.execute(execstr)
-    
-    
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Must provide input configuration")
