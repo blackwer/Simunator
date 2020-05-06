@@ -6,6 +6,13 @@ from parammaker import ParamMaker
 import sqlite3
 import time
 
+verbose = False
+
+def exec_sql(c, execstr):
+    if verbose:
+        print(execstr)
+    c.execute(execstr)
+
 def gen_param_sets(inputconfig):
     """Generates a parammaker object that generates all unique combinations of parameters as
 specified by input yaml file, and a psets list, the actualization of the generators into a
@@ -39,8 +46,7 @@ def get_db(dbname):
     """
     conn = sqlite3.connect(dbname)
     c = conn.cursor()
-    c.execute(
-
+    exec_sql(c,
     """CREATE TABLE IF NOT EXISTS simunator_runsets (
                         time TEXT, cmdtemplate TEXT,
                         pathstring TEXT, templatestr TEXT
@@ -67,9 +73,7 @@ def add_set_to_db(c, currtime, inputconfig, template_joined, pmaker, psets):
             paramstr += param + " STRING, "
         else:
             paramstr += param + " NUMERIC, "
-    paramstr = paramstr[0:-2]
-    print('CREATE TABLE IF NOT EXISTS "{0}" ( {1} );'.format(str(currtime), paramstr))
-    c.execute('CREATE TABLE IF NOT EXISTS "{0}" ( {1} );'.format(str(currtime), paramstr))
+    exec_sql(c, 'CREATE TABLE IF NOT EXISTS "{0}" ( {1} );'.format(str(currtime), paramstr[0:-2]))
 
 
 def create_sims(c, currtime, psets, templatestrs):
@@ -99,11 +103,10 @@ def create_sims(c, currtime, psets, templatestrs):
         # os.chdir(simpath)
         # os.system(inputconfig["system"]["cmd"].format(**{**sim_keywords, **paramdict}))
 
-        execstr = 'INSERT INTO "{0}" VALUES ( {1} );'.format(
+        exec_sql(c, 'INSERT INTO "{0}" VALUES ( {1} );'.format(
             currtime, ", ".join(map(lambda x: '"' + x + '"' if isinstance(x, str) else str(x),
                                     paramdict.values()))
-        )
-        c.execute(execstr)
+        ))
 
 
 if __name__ == "__main__":
