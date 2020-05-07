@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import os
-import sys
 import yaml
 from parammaker import ParamMaker
 import sqlite3
@@ -23,7 +22,8 @@ of the generators into a list.
     # FIXME: probably not best to return two objects, which are basically the
     # same.
     pmaker = ParamMaker()
-    pmaker.from_param_makers(*[ParamMaker(dist) for dist in inputconfig["dists"]])
+    pmaker.from_param_makers(*[ParamMaker(dist)
+                               for dist in inputconfig["dists"]])
     psets = [tuple(pmaker.flatten(tup)) for tup in pmaker.items()]
 
     return pmaker, psets
@@ -90,7 +90,7 @@ combinations of param:value pairs.
     )
 
 
-def create_sims(c, currtime, psets, templatestrs):
+def create_sims(c, currtime, inputconfig, pmaker, psets, templatestrs):
     """Write simulation information to disk for actual running."""
     currpath = os.getcwd()
     sim_keywords = {"SIM_DATE": currtime}
@@ -101,7 +101,8 @@ def create_sims(c, currtime, psets, templatestrs):
 
         simpath = os.path.join(
             currpath,
-            inputconfig["system"]["pathstring"].format(**{**sim_keywords, **paramdict}),
+            inputconfig["system"]["pathstring"].format(
+                **{**sim_keywords, **paramdict}),
         )
         print("Creating path: " + simpath)
         try:
@@ -124,7 +125,8 @@ def create_sims(c, currtime, psets, templatestrs):
                 currtime,
                 ", ".join(
                     map(
-                        lambda x: '"' + x + '"' if isinstance(x, str) else str(x),
+                        lambda x: '"' + x +
+                        '"' if isinstance(x, str) else str(x),
                         paramdict.values(),
                     )
                 ),
@@ -132,12 +134,8 @@ def create_sims(c, currtime, psets, templatestrs):
         )
 
 
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Must provide input configuration")
-        sys.exit(1)
-
-    with open(sys.argv[1]) as f:
+def run_simunator(args):
+    with open(args[0]) as f:
         inputconfig = yaml.load(f, Loader=yaml.FullLoader)
 
     pmaker, psets = gen_param_sets(inputconfig)
@@ -148,7 +146,16 @@ if __name__ == "__main__":
     c, conn = get_db(inputconfig["system"]["database"])
     add_set_to_db(c, currtime, inputconfig, template_joined, pmaker, psets)
 
-    create_sims(c, currtime, psets, templatestrs)
+    create_sims(c, currtime, inputconfig, pmaker, psets, templatestrs)
 
     conn.commit()
     conn.close()
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) != 2:
+        print("Must provide input configuration")
+        sys.exit(1)
+
+    run_simunator(sys.argv[1:])
