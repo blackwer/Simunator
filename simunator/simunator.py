@@ -8,22 +8,26 @@ import time
 
 verbose = False
 
+
 def exec_sql(c, execstr):
     if verbose:
         print(execstr)
     c.execute(execstr)
 
+
 def gen_param_sets(inputconfig):
-    """Generates a parammaker object that generates all unique combinations of parameters as
-specified by input yaml file, and a psets list, the actualization of the generators into a
-list.
+    """Generates a parammaker object that generates all unique combinations of
+parameters as specified by input yaml file, and a psets list, the actualization
+of the generators into a list.
     """
-    # FIXME: probably not best to return two objects, which are basically the same.
+    # FIXME: probably not best to return two objects, which are basically the
+    # same.
     pmaker = ParamMaker()
     pmaker.from_param_makers(*[ParamMaker(dist) for dist in inputconfig["dists"]])
     psets = [tuple(pmaker.flatten(tup)) for tup in pmaker.items()]
 
     return pmaker, psets
+
 
 def gen_template_strings(inputconfig):
     """Generates template strings database from list of input templates."""
@@ -33,30 +37,35 @@ def gen_template_strings(inputconfig):
         with open(fname) as f:
             templatestrs[fname] = f.read()
             template_joined += (
-            "### simunator_begin - {0}\n".format(fname)
-            + templatestrs[fname]
-            + "\n### simunator_end - {0}\n".format(fname)
-        )
+                "### simunator_begin - {0}\n".format(fname)
+                + templatestrs[fname]
+                + "\n### simunator_end - {0}\n".format(fname)
+            )
 
     return templatestrs, template_joined
 
+
 def get_db(dbname):
-    """Opens or creates sqlite3 database that contains simulation information for faithful
-    reproduction of simulation run information.
+    """Opens or creates sqlite3 database that contains simulation information for
+faithful reproduction of simulation run information.
     """
     conn = sqlite3.connect(dbname)
     c = conn.cursor()
-    exec_sql(c,
-    """CREATE TABLE IF NOT EXISTS simunator_runsets (
+    exec_sql(
+        c,
+        """CREATE TABLE IF NOT EXISTS simunator_runsets (
                         time TEXT, cmdtemplate TEXT,
                         pathstring TEXT, templatestr TEXT
-                 );"""
+                 );""",
     )
 
     return c, conn
 
+
 def add_set_to_db(c, currtime, inputconfig, template_joined, pmaker, psets):
-    """Adds system information to database and create table that holds the unique combinations of param:value pairs."""
+    """Adds system information to database and create table that holds the unique
+combinations of param:value pairs.
+    """
     c.execute(
         """INSERT INTO simunator_runsets VALUES ( ?, ?, ?, ? );""",
         (
@@ -73,7 +82,12 @@ def add_set_to_db(c, currtime, inputconfig, template_joined, pmaker, psets):
             paramstr += param + " STRING, "
         else:
             paramstr += param + " NUMERIC, "
-    exec_sql(c, 'CREATE TABLE IF NOT EXISTS "{0}" ( {1} );'.format(str(currtime), paramstr[0:-2]))
+    exec_sql(
+        c,
+        'CREATE TABLE IF NOT EXISTS "{0}" ( {1} );'.format(
+            str(currtime), paramstr[0:-2]
+        ),
+    )
 
 
 def create_sims(c, currtime, psets, templatestrs):
@@ -86,7 +100,8 @@ def create_sims(c, currtime, psets, templatestrs):
             paramdict[key] = val
 
         simpath = os.path.join(
-            currpath, inputconfig["system"]["pathstring"].format(**{**sim_keywords, **paramdict})
+            currpath,
+            inputconfig["system"]["pathstring"].format(**{**sim_keywords, **paramdict}),
         )
         print("Creating path: " + simpath)
         try:
@@ -103,10 +118,18 @@ def create_sims(c, currtime, psets, templatestrs):
         # os.chdir(simpath)
         # os.system(inputconfig["system"]["cmd"].format(**{**sim_keywords, **paramdict}))
 
-        exec_sql(c, 'INSERT INTO "{0}" VALUES ( {1} );'.format(
-            currtime, ", ".join(map(lambda x: '"' + x + '"' if isinstance(x, str) else str(x),
-                                    paramdict.values()))
-        ))
+        exec_sql(
+            c,
+            'INSERT INTO "{0}" VALUES ( {1} );'.format(
+                currtime,
+                ", ".join(
+                    map(
+                        lambda x: '"' + x + '"' if isinstance(x, str) else str(x),
+                        paramdict.values(),
+                    )
+                ),
+            ),
+        )
 
 
 if __name__ == "__main__":
