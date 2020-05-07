@@ -10,102 +10,102 @@ verbose = False
 
 class Simunator:
     def __init__(self, args):
-        self.args = args
-    
-    def exec_sql(self, c, execstr):
+        with open(args[0]) as f:
+            self.inputconfig = yaml.load(f, Loader=yaml.FullLoader)
+
+        self.currtime = time.strftime("%s", time.gmtime())
+
+        self.gen_param_sets()
+        self.gen_template_strings()
+
+        self.get_db(self.inputconfig["system"]["database"])
+        self.add_set_to_db()
+        self.create_sims()
+
+        self.conn.commit()
+
+    def exec_sql(self, execstr):
         if verbose:
             print(execstr)
-        c.execute(execstr)
+        self.c.execute(execstr)
 
-
-    def gen_param_sets(self, inputconfig):
+    def gen_param_sets(self):
         """Generates a parammaker object that generates all unique combinations of
     parameters as specified by input yaml file, and a psets list, the actualization
     of the generators into a list.
         """
         # FIXME: probably not best to return two objects, which are basically the
         # same.
-        pmaker = ParamMaker()
-        pmaker.from_param_makers(*[ParamMaker(dist)
-                                   for dist in inputconfig["dists"]])
-        psets = [tuple(pmaker.flatten(tup)) for tup in pmaker.items()]
+        self.pmaker = ParamMaker()
+        self.pmaker.from_param_makers(*[ParamMaker(dist)
+                                        for dist in self.inputconfig["dists"]])
+        self.psets = [tuple(self.pmaker.flatten(tup))
+                      for tup in self.pmaker.items()]
 
-        return pmaker, psets
-
-
-    def gen_template_strings(self, inputconfig):
+    def gen_template_strings(self):
         """Generates template strings database from list of input templates."""
-        templatestrs = {}
-        template_joined = ""
-        for fname in inputconfig["system"]["templates"]:
+        self.templatestrs = {}
+        self.template_joined = ""
+        for fname in self.inputconfig["system"]["templates"]:
             with open(fname) as f:
-                templatestrs[fname] = f.read()
-                template_joined += (
+                self.templatestrs[fname] = f.read()
+                self.template_joined += (
                     "### simunator_begin - {0}\n".format(fname)
-                    + templatestrs[fname]
+                    + self.templatestrs[fname]
                     + "\n### simunator_end - {0}\n".format(fname)
                 )
-
-        return templatestrs, template_joined
-
 
     def get_db(self, dbname):
         """Opens or creates sqlite3 database that contains simulation information for
     faithful reproduction of simulation run information.
         """
-        conn = sqlite3.connect(dbname)
-        c = conn.cursor()
-        exec_sql(
-            c,
+        self.conn = sqlite3.connect(dbname)
+        self.c = self.conn.cursor()
+        self.exec_sql(
             """CREATE TABLE IF NOT EXISTS simunator_runsets (
                             time TEXT, cmdtemplate TEXT,
                             pathstring TEXT, templatestr TEXT
                      );""",
         )
 
-        return c, conn
-
-
-    def add_set_to_db(self, c, currtime, inputconfig, template_joined, pmaker, psets):
+    def add_set_to_db(self):
         """Adds system information to database and create table that holds the unique
     combinations of param:value pairs.
         """
-        c.execute(
+        self.c.execute(
             """INSERT INTO simunator_runsets VALUES ( ?, ?, ?, ? );""",
             (
-                currtime,
-                inputconfig["system"]["cmd"],
-                inputconfig["system"]["pathstring"],
-                template_joined,
+                self.currtime,
+                self.inputconfig["system"]["cmd"],
+                self.inputconfig["system"]["pathstring"],
+                self.template_joined,
             ),
         )
 
         paramstr = ""
-        for param, valexample in zip(pmaker._params, psets[0]):
+        for param, valexample in zip(self.pmaker._params, self.psets[0]):
             if isinstance(valexample, str):
                 paramstr += param + " STRING, "
             else:
                 paramstr += param + " NUMERIC, "
-        exec_sql(
-            c,
+        self.exec_sql(
             'CREATE TABLE IF NOT EXISTS "{0}" ( {1} );'.format(
-                str(currtime), paramstr[0:-2]
+                str(self.currtime), paramstr[0:-2]
             ),
         )
 
-
-    def create_sims(self, c, currtime, inputconfig, pmaker, psets, templatestrs):
+    def create_sims(self):
         """Write simulation information to disk for actual running."""
         currpath = os.getcwd()
-        sim_keywords = {"SIM_DATE": currtime}
-        for pset in psets:
+        sim_keywords = {"SIM_DATE": self.currtime}
+        for pset in self.psets:
             paramdict = {}
-            for key, val in zip(pmaker._params, pset):
+            for key, val in zip(self.pmaker._params, pset):
                 paramdict[key] = val
 
             simpath = os.path.join(
                 currpath,
-                inputconfig["system"]["pathstring"].format(
+                self.inputconfig["system"]["pathstring"].format(
                     **{**sim_keywords, **paramdict}),
             )
             print("Creating path: " + simpath)
@@ -114,19 +114,18 @@ class Simunator:
             except:
                 pass
 
-            for fname, templatestr in templatestrs.items():
+            for fname, templatestr in self.templatestrs.items():
                 ofile = os.path.join(simpath, fname)
                 print("Creating file: " + ofile)
                 with open(ofile, "w") as f:
                     f.write(templatestr.format(**paramdict))
 
             # os.chdir(simpath)
-            # os.system(inputconfig["system"]["cmd"].format(**{**sim_keywords, **paramdict}))
+            # os.system(self.inputconfig["system"]["cmd"].format(**{**sim_keywords, **paramdict}))
 
-            exec_sql(
-                c,
+            self.exec_sql(
                 'INSERT INTO "{0}" VALUES ( {1} );'.format(
-                    currtime,
+                    self.currtime,
                     ", ".join(
                         map(
                             lambda x: '"' + x +
@@ -137,23 +136,8 @@ class Simunator:
                 ),
             )
 
-
     def run(self):
-        with open(self.args[0]) as f:
-            inputconfig = yaml.load(f, Loader=yaml.FullLoader)
-
-        pmaker, psets = gen_param_sets(inputconfig)
-
-        templatestrs, template_joined = gen_template_strings(inputconfig)
-
-        currtime = time.strftime("%s", time.gmtime())
-        c, conn = get_db(inputconfig["system"]["database"])
-        add_set_to_db(c, currtime, inputconfig, template_joined, pmaker, psets)
-
-        create_sims(c, currtime, inputconfig, pmaker, psets, templatestrs)
-
-        conn.commit()
-        conn.close()
+        pass
 
 
 if __name__ == "__main__":
