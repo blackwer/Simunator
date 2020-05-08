@@ -10,7 +10,7 @@ verbose = False
 
 
 class Simunator:
-    actions = ['list', 'generate']
+    actions = ['list', 'generate', 'delete']
 
     def __init__(self, args):
         import argparse
@@ -27,6 +27,10 @@ class Simunator:
             self.generate(args)
         elif command == 'list':
             self.list_sims(args)
+        elif command == 'delete':
+            self.delete(args)
+
+        self.conn.commit()
 
     def list_sims(self, args):
         parser = argparse.ArgumentParser(
@@ -42,6 +46,39 @@ class Simunator:
                                                            gmt=time.strftime('%Y-%m-%d %H:%M:%S',
                                                                              time.localtime(int(tup[0]))))
                          for tup in self.c.fetchall()]))
+
+    def delete(self, args):
+        parser = argparse.ArgumentParser(
+            description='Delete simulation batch.')
+        parser.add_argument('db', type=str,
+                            help='Database file for Simunator.')
+        parser.add_argument('timestamp', type=str,
+                            help='Timestamp to process')
+        parsedargs = parser.parse_args(args)
+
+        self.get_db(parsedargs.db)
+
+        self.exec_sql("SELECT pathstring FROM simunator_runsets;")
+        pathstring = self.c.fetchone()[0]
+        print(pathstring)
+
+        self.exec_sql("SELECT * from \"{0}\";".format(parsedargs.timestamp))
+        paramlist = next(zip(*self.c.description))
+
+        for paramvals in self.c.fetchall():
+            parammap = {**dict(zip(paramlist, paramvals)), **
+                        {"SIM_DATE": parsedargs.timestamp}}
+            path = pathstring.format(**parammap)
+
+            import shutil
+            try:
+                shutil.rmtree(path)
+            except OSError as e:
+                print("Error: %s - %s." % (e.filename, e.strerror))
+
+        self.exec_sql("DROP TABLE \"{0}\";".format(parsedargs.timestamp))
+        self.exec_sql("DELETE FROM simunator_runsets WHERE time=\"{0}\";".format(
+            parsedargs.timestamp))
 
     def generate(self, args):
         parser = argparse.ArgumentParser(
@@ -61,8 +98,6 @@ class Simunator:
         self.get_db(self.inputconfig["system"]["database"])
         self.add_set_to_db()
         self.create_sims()
-
-        self.conn.commit()
 
     def exec_sql(self, execstr):
         if verbose:
