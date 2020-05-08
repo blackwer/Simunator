@@ -9,8 +9,30 @@ verbose = False
 
 
 class Simunator:
+    actions = ['list', 'generate']
+
     def __init__(self, args):
-        with open(args[0]) as f:
+        import argparse
+
+        command = args[0] if len(args) else ''
+        if command not in self.actions:
+            print('Invalid command: %s' % command, file=sys.stderr)
+            print('Valid options are: %s' %
+                  ', '.join(self.actions), file=sys.stderr)
+            sys.exit(1)
+
+        args = args[1:]
+        if command == 'generate':
+            self.generate(args)
+
+    def generate(self, args):
+        parser = argparse.ArgumentParser(
+            description='Generation simulation data.')
+        parser.add_argument('config', type=str,
+                            help='Config file for Simunator.')
+        parsedargs = parser.parse_args(args)
+
+        with open(parsedargs.config) as f:
             self.inputconfig = yaml.load(f, Loader=yaml.FullLoader)
 
         self.currtime = time.strftime("%s", time.gmtime())
@@ -136,15 +158,8 @@ class Simunator:
                 ),
             )
 
-    def run(self):
-        pass
-
 
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) != 2:
-        print("Must provide input configuration")
-        sys.exit(1)
 
     sims = Simunator(sys.argv[1:])
-    sims.run()
