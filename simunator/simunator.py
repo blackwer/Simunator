@@ -4,6 +4,7 @@ import yaml
 from parammaker import ParamMaker
 import sqlite3
 import time
+import argparse
 
 verbose = False
 
@@ -24,6 +25,23 @@ class Simunator:
         args = args[1:]
         if command == 'generate':
             self.generate(args)
+        elif command == 'list':
+            self.list_sims(args)
+
+    def list_sims(self, args):
+        parser = argparse.ArgumentParser(
+            description='List simulation data.')
+        parser.add_argument('db', type=str,
+                            help='Database file for Simunator.')
+        parsedargs = parser.parse_args(args)
+
+        self.get_db(parsedargs.db)
+        self.exec_sql("SELECT time from simunator_runsets;")
+
+        print('\n'.join(['{timestamp}  ({gmt} GMT)'.format(timestamp=tup[0],
+                                                           gmt=time.strftime('%Y-%m-%d %H:%M:%S',
+                                                                             time.localtime(int(tup[0]))))
+                         for tup in self.c.fetchall()]))
 
     def generate(self, args):
         parser = argparse.ArgumentParser(
