@@ -1,62 +1,57 @@
 #!/usr/bin/env python3
-import os
-import yaml
 import sys
+import os
 from parammaker import ParamMaker
 import sqlite3
 import time
 import argparse
 
-verbose = False
+verbose = True
 
 
 class Simunator:
-    actions = ['list', 'generate', 'delete', 'listtasks']
-
     def __init__(self, args):
-        import argparse
+        actions = {'generate': self.generate,
+                   'list': self.list_sims,
+                   'delete': self.delete,
+                   'listtasks': self.gen_tasks,
+                   }
 
         command = args[0] if len(args) else ''
-        if command not in self.actions:
-            print('Invalid command: %s' % command, file=sys.stderr)
-            print('Valid options are: %s' %
-                  ', '.join(self.actions), file=sys.stderr)
-            sys.exit(1)
-
         args = args[1:]
-        if command == 'generate':
-            self.generate(args)
-        elif command == 'list':
-            self.list_sims(args)
-        elif command == 'delete':
-            self.delete(args)
-        elif command == 'listtasks':
-            self.gen_tasks(args)
+
+        if command not in actions.keys():
+            print("Invalid command: {}".format(command), file=sys.stderr)
+            print("Valid options are: {}".format(
+                  ", ".join(actions.keys())), file=sys.stderr)
+            sys.exit(1)
+        else:
+            actions[command](args)
 
         self.conn.commit()
 
     def list_sims(self, args):
         parser = argparse.ArgumentParser(
-            description='List simulation data.')
+            description="List simulation data.")
         parser.add_argument('db', type=str,
-                            help='Database file for Simunator.')
+                            help="Database file for Simunator.")
         parsedargs = parser.parse_args(args)
 
         self.get_db(parsedargs.db)
-        self.exec_sql("SELECT time from simunator_runsets;")
+        self.exec_sql("SELECT time FROM simunator_runsets;")
 
-        print('\n'.join(['{timestamp}  ({gmt} GMT)'.format(timestamp=tup[0],
-                                                           gmt=time.strftime('%Y-%m-%d %H:%M:%S',
+        print("\n".join(["{timestamp}  ({gmt} GMT)".format(timestamp=tup[0],
+                                                           gmt=time.strftime("%Y-%m-%d %H:%M:%S",
                                                                              time.localtime(int(tup[0]))))
                          for tup in self.c.fetchall()]))
 
     def delete(self, args):
         parser = argparse.ArgumentParser(
-            description='Delete simulation batch.')
+            description="Delete simulation batch.")
         parser.add_argument('db', type=str,
-                            help='Database file for Simunator.')
+                            help="Database file for Simunator.")
         parser.add_argument('timestamp', type=str,
-                            help='Timestamp to process')
+                            help="Timestamp to process")
         parsedargs = parser.parse_args(args)
 
         self.get_db(parsedargs.db)
@@ -64,7 +59,7 @@ class Simunator:
         self.exec_sql("SELECT pathstring FROM simunator_runsets;")
         pathstring = self.c.fetchone()[0]
 
-        self.exec_sql("SELECT * from \"{0}\";".format(parsedargs.timestamp))
+        self.exec_sql("SELECT * from '{0}';".format(parsedargs.timestamp))
         paramlist = next(zip(*self.c.description))
 
         for paramvals in self.c.fetchall():
@@ -78,18 +73,18 @@ class Simunator:
             except OSError as e:
                 print("Error: %s - %s." % (e.filename, e.strerror))
 
-        self.exec_sql("DROP TABLE \"{0}\";".format(parsedargs.timestamp))
-        self.exec_sql("DELETE FROM simunator_runsets WHERE time=\"{0}\";".format(
+        self.exec_sql("DROP TABLE '{0}';".format(parsedargs.timestamp))
+        self.exec_sql("DELETE FROM simunator_runsets WHERE time='{}';".format(
             parsedargs.timestamp))
 
     def gen_tasks(self, args):
         parser = argparse.ArgumentParser(
-            description='Delete simulation batch.')
+            description="Delete simulation batch.")
         parser.add_argument('db', type=str,
-                            help='Database file for Simunator.')
+                            help="Database file for Simunator.")
         parser.add_argument('timestamp', type=str,
-                            help='Timestamp to process')
-        parser.add_argument('--task-file', type=str, help='Output file for tasks',
+                            help="Timestamp to process")
+        parser.add_argument('--task-file', type=str, help="Output file for tasks",
                             dest='taskfile', default=None)
         parsedargs = parser.parse_args(args)
 
@@ -98,25 +93,26 @@ class Simunator:
 
         self.get_db(parsedargs.db)
 
-        self.exec_sql("SELECT pathstring,cmdtemplate FROM simunator_runsets;")
+        self.exec_sql("SELECT pathstring, cmdtemplate FROM simunator_runsets;")
         pathstring, cmdtemplate = self.c.fetchone()
 
-        self.exec_sql("SELECT * from \"{0}\";".format(parsedargs.timestamp))
+        self.exec_sql("SELECT * from '{}';".format(parsedargs.timestamp))
         paramlist = next(zip(*self.c.description))
 
         for paramvals in self.c.fetchall():
             parammap = {**dict(zip(paramlist, paramvals)), **
-                        {"SIM_DATE": parsedargs.timestamp}}
+                        {'SIM_DATE': parsedargs.timestamp}}
             path = pathstring.format(**parammap)
             cmd = cmdtemplate.format(**parammap)
             print("cd {path}; {cmd}".format(path=path, cmd=cmd), file=outfile)
 
     def generate(self, args):
+        import yaml
         parser = argparse.ArgumentParser(
-            description='Generation simulation data.')
+            description="Generation simulation data.")
         parser.add_argument('config', type=str,
-                            help='Config file for Simunator.')
-        parser.add_argument('--taskfile', type=str, help='Output file for tasks',
+                            help="Config file for Simunator.")
+        parser.add_argument('--taskfile', type=str, help="Output file for tasks",
                             dest='taskfile', default='sys.stdout')
         parsedargs = parser.parse_args(args)
 
@@ -153,7 +149,7 @@ class Simunator:
         """Generates template strings database from list of input templates."""
         self.templatestrs = {}
         self.template_joined = ""
-        for fname in self.inputconfig["system"]["templates"]:
+        for fname in self.inputconfig['system']['templates']:
             with open(fname) as f:
                 self.templatestrs[fname] = f.read()
                 self.template_joined += (
@@ -179,24 +175,18 @@ class Simunator:
         """Adds system information to database and create table that holds the unique
     combinations of param:value pairs.
         """
-        self.c.execute(
-            """INSERT INTO simunator_runsets VALUES ( ?, ?, ?, ? );""",
-            (
-                self.currtime,
-                self.inputconfig["system"]["cmd"],
-                self.inputconfig["system"]["pathstring"],
-                self.template_joined,
-            ),
-        )
+        self.c.execute("INSERT INTO simunator_runsets VALUES ( '{0}', '{1}', '{2}', '{3}' );".format(
+            self.currtime,
+            self.inputconfig["system"]["cmd"],
+            self.inputconfig["system"]["pathstring"],
+            self.template_joined))
 
         paramstr = ""
         for param, valexample in zip(self.params, self.psets[0]):
-            if isinstance(valexample, str):
-                paramstr += param + " STRING, "
-            else:
-                paramstr += param + " NUMERIC, "
+            paramstr += " STRING, " if isinstance(
+                valexample, str) else " NUMERIC, "
         self.exec_sql(
-            'CREATE TABLE IF NOT EXISTS "{0}" ( {1} );'.format(
+            "CREATE TABLE IF NOT EXISTS '{0}' ( {1} );".format(
                 str(self.currtime), paramstr[0:-2]
             ),
         )
@@ -204,7 +194,7 @@ class Simunator:
     def create_sims(self):
         """Write simulation information to disk for actual running."""
         currpath = os.getcwd()
-        sim_keywords = {"SIM_DATE": self.currtime}
+        sim_keywords = {'SIM_DATE': self.currtime}
         for pset in self.psets:
             paramdict = {}
             for key, val in zip(self.params, pset):
@@ -212,10 +202,10 @@ class Simunator:
 
             simpath = os.path.join(
                 currpath,
-                self.inputconfig["system"]["pathstring"].format(
+                self.inputconfig['system']['pathstring'].format(
                     **{**sim_keywords, **paramdict}),
             )
-            print("Creating path: " + simpath)
+            print("Creating path: {}".format(simpath))
             try:
                 os.makedirs(simpath)
             except:
@@ -231,7 +221,7 @@ class Simunator:
             # os.system(self.inputconfig["system"]["cmd"].format(**{**sim_keywords, **paramdict}))
 
             self.exec_sql(
-                'INSERT INTO "{0}" VALUES ( {1} );'.format(
+                "INSERT INTO '{0}' VALUES ( {1} );".format(
                     self.currtime,
                     ", ".join(
                         map(
