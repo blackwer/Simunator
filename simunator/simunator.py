@@ -96,7 +96,7 @@ class Simunator:
         self.exec_sql("SELECT pathstring, cmdtemplate FROM simunator_runsets;")
         pathstring, cmdtemplate = self.c.fetchone()
 
-        self.exec_sql("SELECT * from '{}';".format(parsedargs.timestamp))
+        self.exec_sql("SELECT * from '{0}';".format(parsedargs.timestamp))
         paramlist = next(zip(*self.c.description))
 
         for paramvals in self.c.fetchall():
@@ -183,8 +183,8 @@ class Simunator:
 
         paramstr = ""
         for param, valexample in zip(self.params, self.psets[0]):
-            paramstr += " STRING, " if isinstance(
-                valexample, str) else " NUMERIC, "
+            paramstr += param + " STRING, " if isinstance(
+                valexample, str) else param + " NUMERIC, "
         self.exec_sql(
             "CREATE TABLE IF NOT EXISTS '{0}' ( {1} );".format(
                 str(self.currtime), paramstr[0:-2]
