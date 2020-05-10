@@ -63,7 +63,6 @@ class Simunator:
 
         self.exec_sql("SELECT pathstring FROM simunator_runsets;")
         pathstring = self.c.fetchone()[0]
-        print(pathstring)
 
         self.exec_sql("SELECT * from \"{0}\";".format(parsedargs.timestamp))
         paramlist = next(zip(*self.c.description))
@@ -145,11 +144,10 @@ class Simunator:
         """
         # FIXME: probably not best to return two objects, which are basically the
         # same.
-        self.pmaker = ParamMaker()
-        self.pmaker.from_param_makers(*[ParamMaker(dist)
-                                        for dist in self.inputconfig["dists"]])
-        self.psets = [tuple(self.pmaker.flatten(tup))
-                      for tup in self.pmaker.items()]
+        pmaker = ParamMaker()
+        pmaker.from_param_makers(*[ParamMaker(dist)
+                                   for dist in self.inputconfig["dists"]])
+        self.params, self.psets = pmaker.actualize()
 
     def gen_template_strings(self):
         """Generates template strings database from list of input templates."""
@@ -192,7 +190,7 @@ class Simunator:
         )
 
         paramstr = ""
-        for param, valexample in zip(self.pmaker._params, self.psets[0]):
+        for param, valexample in zip(self.params, self.psets[0]):
             if isinstance(valexample, str):
                 paramstr += param + " STRING, "
             else:
@@ -209,7 +207,7 @@ class Simunator:
         sim_keywords = {"SIM_DATE": self.currtime}
         for pset in self.psets:
             paramdict = {}
-            for key, val in zip(self.pmaker._params, pset):
+            for key, val in zip(self.params, pset):
                 paramdict[key] = val
 
             simpath = os.path.join(

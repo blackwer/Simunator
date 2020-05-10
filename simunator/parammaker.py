@@ -21,14 +21,20 @@ class ParamMaker:
         self._generator = it.product(*[pm._generator for pm in args])
         return self
 
+    def actualize(self):
+        return self._params, [tuple(self.flatten(tup))
+                              for tup in self.items()]
+
     def build_generator(self):
         if self._disttype == "RandUniform":
             self._generator = self.rand_uniform(
-                [val["bounds"] for _, val in self._params.items()], self._samples
+                [val["bounds"]
+                    for _, val in self._params.items()], self._samples
             )
         elif self._disttype == "Uniform":
             self._generator = self.lin_uniform(
-                [val["bounds"] for _, val in self._params.items()], self._samples
+                [val["bounds"]
+                    for _, val in self._params.items()], self._samples
             )
         elif self._disttype == "ItemizedList":
             param = list(self._params.keys())[0]
