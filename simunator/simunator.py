@@ -21,8 +21,8 @@ class Simunator:
         args = args[1:]
 
         if command not in actions.keys():
-            print("Invalid command: {}".format(command), file=sys.stderr)
-            print("Valid options are: {}".format(
+            print("Invalid command: {0}".format(command), file=sys.stderr)
+            print("Valid options are: {0}".format(
                   ", ".join(actions.keys())), file=sys.stderr)
             sys.exit(1)
         else:
@@ -64,7 +64,8 @@ class Simunator:
 
         for paramvals in self.c.fetchall():
             parammap = {**dict(zip(paramlist, paramvals)), **
-                        {"SIM_DATE": parsedargs.timestamp}}
+                        {'SIM_DATE': parsedargs.timestamp}}
+
             path = pathstring.format(**parammap)
 
             import shutil
@@ -74,7 +75,7 @@ class Simunator:
                 print("Error: %s - %s." % (e.filename, e.strerror))
 
         self.exec_sql("DROP TABLE '{0}';".format(parsedargs.timestamp))
-        self.exec_sql("DELETE FROM simunator_runsets WHERE time='{}';".format(
+        self.exec_sql("DELETE FROM simunator_runsets WHERE time='{0}';".format(
             parsedargs.timestamp))
 
     def gen_tasks(self, args):
@@ -205,7 +206,7 @@ class Simunator:
                 self.inputconfig['system']['pathstring'].format(
                     **{**sim_keywords, **paramdict}),
             )
-            print("Creating path: {}".format(simpath))
+            print("Creating path: {0}".format(simpath))
             try:
                 os.makedirs(simpath)
             except:
