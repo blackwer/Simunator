@@ -87,6 +87,8 @@ class Simunator:
                             help="Timestamp to process")
         parser.add_argument('--task-file', type=str, help="Output file for tasks",
                             dest='taskfile', default=None)
+        parser.add_argument('--cmd', type=str, help="Command alias to run",
+                            dest='cmd', default='run')
         parsedargs = parser.parse_args(args)
 
         outfile = open(parsedargs.taskfile,
@@ -94,8 +96,9 @@ class Simunator:
 
         self.get_db(parsedargs.db)
 
-        self.exec_sql("SELECT pathstring, cmdtemplate FROM simunator_runsets;")
-        pathstring, cmdtemplate = self.c.fetchone()
+        self.exec_sql("SELECT pathstring, cmds FROM simunator_runsets;")
+        pathstring, cmdsstring = self.c.fetchone()
+        cmds = eval(cmdsstring)
 
         self.exec_sql("SELECT * from '{0}';".format(parsedargs.timestamp))
         paramlist = next(zip(*self.c.description))
@@ -104,7 +107,7 @@ class Simunator:
             parammap = {**dict(zip(paramlist, paramvals)), **
                         {'SIM_DATE': parsedargs.timestamp}}
             path = pathstring.format(**parammap)
-            cmd = cmdtemplate.format(**parammap)
+            cmd = cmds[parsedargs.cmd].format(**parammap)
             print("cd {path}; {cmd}".format(path=path, cmd=cmd), file=outfile)
 
     def generate(self, args):
@@ -131,7 +134,7 @@ class Simunator:
 
     def exec_sql(self, execstr):
         if verbose:
-            print(execstr)
+            print(execstr, file=sys.stderr)
         self.c.execute(execstr)
 
     def gen_param_sets(self):
@@ -167,7 +170,7 @@ class Simunator:
         self.c = self.conn.cursor()
         self.exec_sql(
             """CREATE TABLE IF NOT EXISTS simunator_runsets (
-                            time TEXT, cmdtemplate TEXT,
+                            time TEXT, cmds TEXT,
                             pathstring TEXT, templatestr TEXT
                      );""",
         )
@@ -176,9 +179,9 @@ class Simunator:
         """Adds system information to database and create table that holds the unique
     combinations of param:value pairs.
         """
-        self.exec_sql("INSERT INTO simunator_runsets VALUES ( '{0}', '{1}', '{2}', '{3}' );".format(
+        self.c.execute("INSERT INTO simunator_runsets VALUES ( ?, ?, ?, ? );", (
             self.currtime,
-            self.inputconfig["system"]["cmd"],
+            str(self.inputconfig["system"]["cmds"]),
             self.inputconfig["system"]["pathstring"],
             self.template_joined))
 
