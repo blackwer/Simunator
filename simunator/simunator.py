@@ -135,7 +135,7 @@ class Simunator:
         self.c.execute(execstr)
 
     def gen_param_sets(self):
-        """Generates a parammaker object that generates all unique combinations of
+        """Creates a parammaker object that generates all unique combinations of
     parameters as specified by input yaml file, and a psets list, the actualization
     of the generators into a list.
         """
@@ -176,7 +176,7 @@ class Simunator:
         """Adds system information to database and create table that holds the unique
     combinations of param:value pairs.
         """
-        self.c.execute("INSERT INTO simunator_runsets VALUES ( '{0}', '{1}', '{2}', '{3}' );".format(
+        self.exec_sql("INSERT INTO simunator_runsets VALUES ( '{0}', '{1}', '{2}', '{3}' );".format(
             self.currtime,
             self.inputconfig["system"]["cmd"],
             self.inputconfig["system"]["pathstring"],
