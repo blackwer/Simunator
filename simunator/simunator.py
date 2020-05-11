@@ -65,8 +65,7 @@ class Simunator:
         for paramvals in self.c.fetchall():
             parammap = {**dict(zip(paramlist, paramvals)), **
                         {'SIM_DATE': parsedargs.timestamp}}
-
-            path = pathstring.format(**parammap)
+            path = parammap['SIM_PATH']
 
             import shutil
             try:
@@ -96,9 +95,8 @@ class Simunator:
 
         self.get_db(parsedargs.db)
 
-        self.exec_sql("SELECT pathstring, cmds FROM simunator_runsets;")
-        pathstring, cmdsstring = self.c.fetchone()
-        cmds = eval(cmdsstring)
+        self.exec_sql("SELECT cmds FROM simunator_runsets;")
+        cmds = eval(str(self.c.fetchone()[0]))
 
         self.exec_sql("SELECT * from '{0}';".format(parsedargs.timestamp))
         paramlist = next(zip(*self.c.description))
@@ -106,9 +104,10 @@ class Simunator:
         for paramvals in self.c.fetchall():
             parammap = {**dict(zip(paramlist, paramvals)), **
                         {'SIM_DATE': parsedargs.timestamp}}
-            path = pathstring.format(**parammap)
+            path = parammap['SIM_PATH']
             cmd = cmds[parsedargs.cmd].format(**parammap)
-            print("cd {path}; {cmd}".format(path=path, cmd=cmd), file=outfile)
+            print("cd '{path}'; {cmd}".format(
+                path=path, cmd=cmd), file=outfile)
 
     def generate(self, args):
         import yaml
@@ -152,15 +151,9 @@ class Simunator:
     def gen_template_strings(self):
         """Generates template strings database from list of input templates."""
         self.templatestrs = {}
-        self.template_joined = ""
         for fname in self.inputconfig['system']['templates']:
             with open(fname) as f:
                 self.templatestrs[fname] = f.read()
-                self.template_joined += (
-                    "### simunator_begin - {0}\n".format(fname)
-                    + self.templatestrs[fname]
-                    + "\n### simunator_end - {0}\n".format(fname)
-                )
 
     def get_db(self, dbname):
         """Opens or creates sqlite3 database that contains simulation information for
@@ -183,15 +176,15 @@ class Simunator:
             self.currtime,
             str(self.inputconfig["system"]["cmds"]),
             self.inputconfig["system"]["pathstring"],
-            self.template_joined))
+            str(self.templatestrs)))
 
-        paramstr = ""
+        paramstr = "SIM_PATH STRING"
         for param, valexample in zip(self.params, self.psets[0]):
-            paramstr += param + " STRING, " if isinstance(
-                valexample, str) else param + " NUMERIC, "
+            paramstr += param + ", STRING" if isinstance(
+                valexample, str) else param + ", NUMERIC"
         self.exec_sql(
             "CREATE TABLE IF NOT EXISTS '{0}' ( {1} );".format(
-                str(self.currtime), paramstr[0:-2]
+                str(self.currtime), paramstr,
             ),
         )
 
@@ -221,9 +214,6 @@ class Simunator:
                 with open(ofile, "w") as f:
                     f.write(templatestr.format(**paramdict))
 
-            # os.chdir(simpath)
-            # os.system(self.inputconfig["system"]["cmd"].format(**{**sim_keywords, **paramdict}))
-
             self.exec_sql(
                 "INSERT INTO '{0}' VALUES ( {1} );".format(
                     self.currtime,
@@ -231,7 +221,7 @@ class Simunator:
                         map(
                             lambda x: '"' + x +
                             '"' if isinstance(x, str) else str(x),
-                            paramdict.values(),
+                            {**{'SIM_PATH': simpath}, **paramdict}.values(),
                         )
                     ),
                 ),

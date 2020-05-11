@@ -1,0 +1,38 @@
+dists:
+  # - RandUniform:
+  #     samples: 2
+  #     params:
+  #       kappa:
+  #         bounds: [0, 1]
+  #         shortname: k
+
+  #       sigma:
+  #         bounds: [0, 20]
+
+  # - ItemizedList:
+  #     params:
+  #       A: ["one", "two", "three"]
+
+  # - ItemizedList:
+  #     params:
+  #       B: [4, 5, 6]
+
+  - Uniform:
+      samples: 11
+      params:
+        x:
+          bounds: [0, 1]
+
+  - Uniform:
+      samples: 11
+      params:
+        y:
+          bounds: [0, 1]
+
+system:
+  templates: ['example.py', 'analyze.sh']
+  pathstring: 'example/{SIM_DATE}/x#{x}_y#{y}'
+  cmds:
+    run: 'python3 example.py > example.log'
+    analyze: 'bash ./analyze.sh'
+  database: 'example.db'
