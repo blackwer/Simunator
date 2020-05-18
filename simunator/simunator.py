@@ -40,9 +40,10 @@ class Simunator:
         self.get_db(parsedargs.db)
         self.exec_sql("SELECT time FROM simunator_runsets;")
 
-        gmt = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(tup[0])))
+        def gmt(x):
+            return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(x)))
         print("\n".join(["{timestamp}  ({gmt} GMT)".format(timestamp=tup[0],
-                                                           gmt=gmt)
+                                                           gmt=gmt(tup[0]))
                          for tup in self.c.fetchall()]))
 
     def delete(self, args):
