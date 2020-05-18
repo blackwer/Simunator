@@ -61,9 +61,10 @@ class Simunator:
         pathstring = self.c.fetchone()[0]
 
         self.exec_sql("SELECT * from '{0}';".format(parsedargs.timestamp))
-        paramlist = self.c.fetchone().keys()
+        sims = self.c.fetchall()
+        paramlist = sims[0].keys()
 
-        for paramvals in self.c.fetchall():
+        for paramvals in sims:
             parammap = {**dict(zip(paramlist, paramvals)), **
                         {'SIM_DATE': parsedargs.timestamp}}
             path = parammap['SIM_PATH']
