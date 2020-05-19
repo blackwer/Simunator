@@ -10,8 +10,10 @@ verbose = True
 
 
 class Simunator:
+    db = 'simunator.db'
+
     def __init__(self, args):
-        actions = {'generate': self.generate,
+        actions = {'create': self.create,
                    'list': self.list_sims,
                    'delete': self.delete,
                    'listtasks': self.gen_tasks,
@@ -31,13 +33,7 @@ class Simunator:
         self.conn.commit()
 
     def list_sims(self, args):
-        parser = argparse.ArgumentParser(
-            description="List simulation data.")
-        parser.add_argument('db', type=str,
-                            help="Database file for Simunator.")
-        parsedargs = parser.parse_args(args)
-
-        self.get_db(parsedargs.db)
+        self.get_db()
         self.exec_sql("SELECT time FROM simunator_runsets;")
 
         def gmt(x):
@@ -49,16 +45,11 @@ class Simunator:
     def delete(self, args):
         parser = argparse.ArgumentParser(
             description="Delete simulation batch.")
-        parser.add_argument('db', type=str,
-                            help="Database file for Simunator.")
         parser.add_argument('timestamp', type=str,
                             help="Timestamp to process")
         parsedargs = parser.parse_args(args)
 
-        self.get_db(parsedargs.db)
-
-        self.exec_sql("SELECT pathstring FROM simunator_runsets;")
-        pathstring = self.c.fetchone()[0]
+        self.get_db()
 
         self.exec_sql("SELECT * from '{0}';".format(parsedargs.timestamp))
         sims = self.c.fetchall()
@@ -82,8 +73,6 @@ class Simunator:
     def gen_tasks(self, args):
         parser = argparse.ArgumentParser(
             description="Delete simulation batch.")
-        parser.add_argument('db', type=str,
-                            help="Database file for Simunator.")
         parser.add_argument('timestamp', type=str,
                             help="Timestamp to process")
         parser.add_argument('--task-file', type=str, help="Output file for tasks",
@@ -95,7 +84,7 @@ class Simunator:
         outfile = open(parsedargs.taskfile,
                        'w') if parsedargs.taskfile else sys.stdout
 
-        self.get_db(parsedargs.db)
+        self.get_db()
 
         self.exec_sql("SELECT cmdname, cmdtemplate FROM simunator_cmds;")
         cmds = dict(self.c.fetchall())
@@ -111,7 +100,7 @@ class Simunator:
             print("cd '{path}'; {cmd}".format(
                 path=path, cmd=cmd), file=outfile)
 
-    def generate(self, args):
+    def create(self, args):
         import yaml
         parser = argparse.ArgumentParser(
             description="Generation simulation data.")
@@ -129,7 +118,7 @@ class Simunator:
         self.gen_param_sets()
         self.gen_template_strings()
 
-        self.get_db(self.inputconfig["system"]["database"])
+        self.get_db()
         self.add_set_to_db()
         self.create_sims()
 
@@ -157,11 +146,11 @@ class Simunator:
             with open(fname) as f:
                 self.templatestrs[fname] = f.read()
 
-    def get_db(self, dbname):
+    def get_db(self):
         """Opens or creates sqlite3 database that contains simulation information for
     faithful reproduction of simulation run information.
         """
-        self.conn = sqlite3.connect(dbname)
+        self.conn = sqlite3.connect(self.db)
         self.conn.row_factory = sqlite3.Row
         self.c = self.conn.cursor()
         self.exec_sql(

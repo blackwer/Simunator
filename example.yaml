@@ -35,4 +35,3 @@ system:
   cmds:
     run: 'python3 example.py > example.log'
     analyze: 'bash ./analyze.sh'
-  database: 'example.db'
