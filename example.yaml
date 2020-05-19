@@ -32,7 +32,7 @@ dists:
 system:
   templates: ['example.py', 'analyze.sh']
   pathstring: 'example/{SIM_DATE}/x#{x}_y#{y}'
-  cmds:
+  commands:
     run: 'python3 example.py > example.log'
     analyze: 'bash ./analyze.sh'
   collectors:

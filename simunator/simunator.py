@@ -6,7 +6,7 @@ import sqlite3
 import time
 import argparse
 
-verbose = True
+verbose = False
 
 
 class Simunator:
@@ -78,8 +78,8 @@ class Simunator:
                             help="Timestamp to process")
         parser.add_argument('--task-file', type=str, help="Output file for tasks",
                             dest='taskfile', default=None)
-        parser.add_argument('--cmd', type=str, help="Command alias to run",
-                            dest='cmd', default='run')
+        parser.add_argument('--command', type=str, help="Command alias to run",
+                            dest='command', default='run')
         parsedargs = parser.parse_args(args)
 
         outfile = open(parsedargs.taskfile,
@@ -87,7 +87,7 @@ class Simunator:
 
         self.get_db()
 
-        self.exec_sql("SELECT cmdname, cmdtemplate FROM simunator_cmds;")
+        self.exec_sql("SELECT cmdname, cmdtemplate FROM simunator_commands;")
         cmds = dict(self.c.fetchall())
 
         self.exec_sql("SELECT * from '{0}';".format(parsedargs.timestamp))
@@ -97,7 +97,7 @@ class Simunator:
             parammap = {**dict(zip(paramlist, paramvals)),
                         **{'SIM_DATE': parsedargs.timestamp}}
             path = parammap['SIM_PATH']
-            cmd = cmds[parsedargs.cmd].format(**parammap)
+            cmd = cmds[parsedargs.command].format(**parammap)
             print("cd '{path}'; {cmd}".format(
                 path=path, cmd=cmd), file=outfile)
 
@@ -201,7 +201,7 @@ class Simunator:
                      );""",
         )
         self.exec_sql(
-            """CREATE TABLE IF NOT EXISTS simunator_cmds (
+            """CREATE TABLE IF NOT EXISTS simunator_commands (
                             cmdname TEXT, cmdtemplate TEXT
                      );""",
         )
@@ -220,9 +220,9 @@ class Simunator:
             self.inputconfig["system"]["pathstring"],
             str(self.templatestrs)))
 
-        for cmdname, cmdtemplate in self.inputconfig["system"]["cmds"].items():
+        for cmdname, cmdtemplate in self.inputconfig["system"]["commands"].items():
             self.c.execute(
-                "INSERT INTO simunator_cmds VALUES ( ?, ? );",
+                "INSERT INTO simunator_commands VALUES ( ?, ? );",
                 (cmdname, cmdtemplate)
             )
 
