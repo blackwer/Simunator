@@ -16,6 +16,7 @@ class Simunator:
         actions = {'create': self.create,
                    'list': self.list_sims,
                    'delete': self.delete,
+                   'collect': self.collect,
                    'listtasks': self.gen_tasks,
                    }
 
@@ -56,8 +57,8 @@ class Simunator:
         paramlist = sims[0].keys()
 
         for paramvals in sims:
-            parammap = {**dict(zip(paramlist, paramvals)), **
-                        {'SIM_DATE': parsedargs.timestamp}}
+            parammap = {**dict(zip(paramlist, paramvals)),
+                        **{'SIM_DATE': parsedargs.timestamp}}
             path = parammap['SIM_PATH']
 
             import shutil
@@ -90,9 +91,9 @@ class Simunator:
         cmds = dict(self.c.fetchall())
 
         self.exec_sql("SELECT * from '{0}';".format(parsedargs.timestamp))
-        paramlist = self.c.fetchone().keys()
 
         for paramvals in self.c.fetchall():
+            paramlist = paramvals.keys()
             parammap = {**dict(zip(paramlist, paramvals)),
                         **{'SIM_DATE': parsedargs.timestamp}}
             path = parammap['SIM_PATH']
@@ -121,6 +122,49 @@ class Simunator:
         self.get_db()
         self.add_set_to_db()
         self.create_sims()
+
+    def collect(self, args):
+        parser = argparse.ArgumentParser(
+            description="Collect simulation batch.")
+        parser.add_argument('timestamp', type=str,
+                            help="Timestamp to process")
+        parser.add_argument('--collector', type=str, dest='collector',
+                            help='Collector to use. Default is to collect all', default=None)
+        parsedargs = parser.parse_args(args)
+
+        self.get_db()
+
+        self.exec_sql(
+            "SELECT *,rowid from '{0}';".format(parsedargs.timestamp))
+        sims = self.c.fetchall()
+        paramlist = sims[0].keys()
+
+        if parsedargs.collector:
+            self.exec_sql("SELECT cmdname, cmdtemplate FROM simunator_collectors WHERE cmdname == '{0}';".format(
+                parsedargs.collector))
+            cmdpairs = self.c.fetchall()
+        else:
+            self.exec_sql(
+                "SELECT cmdname, cmdtemplate FROM simunator_collectors;")
+            cmdpairs = self.c.fetchall()
+
+        import subprocess
+        import shlex
+        for paramvals in sims:
+            parammap = {**dict(zip(paramlist, paramvals)),
+                        **{'SIM_DATE': parsedargs.timestamp}}
+            path = os.path.join(os.getcwd(), parammap['SIM_PATH'])
+            for cmdpair in cmdpairs:
+                var, cmdtemplate = cmdpair
+                cmdlist = shlex.split(cmdtemplate.format(**parammap))
+                result = subprocess.run(
+                    cmdlist, cwd=path, stdout=subprocess.PIPE)
+                val = float(result.stdout.decode('utf-8'))
+
+                self.exec_sql("UPDATE '{0}' SET '{1}' = {2} where rowid = {3};".format(parsedargs.timestamp,
+                                                                                       var,
+                                                                                       val,
+                                                                                       paramvals["rowid"]))
 
     def exec_sql(self, execstr):
         if verbose:
@@ -185,7 +229,7 @@ class Simunator:
         for collectname, collecttemplate in self.inputconfig["system"]["collectors"].items():
             self.c.execute(
                 "INSERT INTO simunator_collectors VALUES ( ?, ? );",
-                (cmdname, cmdtemplate)
+                (collectname, collecttemplate)
             )
 
         paramstr = "SIM_PATH STRING"
@@ -210,7 +254,6 @@ class Simunator:
             for key, val in zip(self.params, pset):
                 paramdict[key] = val
             simpath = os.path.join(
-                currpath,
                 self.inputconfig['system']['pathstring'].format(
                     **{**sim_keywords, **paramdict}),
             )
