@@ -132,8 +132,6 @@ class Simunator:
     parameters as specified by input yaml file, and a psets list, the actualization
     of the generators into a list.
         """
-        # FIXME: probably not best to return two objects, which are basically the
-        # same.
         pmaker = ParamMaker()
         pmaker.from_param_makers(*[ParamMaker(dist)
                                    for dist in self.inputconfig["dists"]])
