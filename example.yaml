@@ -35,3 +35,5 @@ system:
   cmds:
     run: 'python3 example.py > example.log'
     analyze: 'bash ./analyze.sh'
+  collectors:
+    z: 'cat example_analyzed.log'

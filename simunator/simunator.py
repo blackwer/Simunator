@@ -163,10 +163,15 @@ class Simunator:
                             cmdname TEXT, cmdtemplate TEXT
                      );""",
         )
+        self.exec_sql(
+            """CREATE TABLE IF NOT EXISTS simunator_collectors (
+                            cmdname TEXT, cmdtemplate TEXT
+                     );""",
+        )
 
     def add_set_to_db(self):
-        """Adds system information to database and create table that holds the unique
-    combinations of param:value pairs.
+        """Adds system information for current simulation set to database and create 
+    table that holds the unique combinations of param:value pairs.
         """
         self.c.execute("INSERT INTO simunator_runsets VALUES ( ?, ?, ? );", (
             self.currtime,
@@ -175,12 +180,23 @@ class Simunator:
 
         for cmdname, cmdtemplate in self.inputconfig["system"]["cmds"].items():
             self.c.execute(
-                "INSERT INTO simunator_cmds VALUES ( ?, ? );", (cmdname, cmdtemplate))
+                "INSERT INTO simunator_cmds VALUES ( ?, ? );",
+                (cmdname, cmdtemplate)
+            )
+
+        for collectname, collecttemplate in self.inputconfig["system"]["collectors"].items():
+            self.c.execute(
+                "INSERT INTO simunator_collectors VALUES ( ?, ? );",
+                (cmdname, cmdtemplate)
+            )
 
         paramstr = "SIM_PATH STRING"
         for param, valexample in zip(self.params, self.psets[0]):
             paramstr += ", " + param + " STRING" if isinstance(
                 valexample, str) else ", " + param + " NUMERIC"
+        for collector in self.inputconfig["system"]["collectors"].keys():
+            paramstr += ", " + collector + " NUMERIC"
+
         self.exec_sql(
             "CREATE TABLE IF NOT EXISTS '{0}' ( {1} );".format(
                 str(self.currtime), paramstr,
@@ -195,7 +211,6 @@ class Simunator:
             paramdict = {}
             for key, val in zip(self.params, pset):
                 paramdict[key] = val
-
             simpath = os.path.join(
                 currpath,
                 self.inputconfig['system']['pathstring'].format(
@@ -214,8 +229,11 @@ class Simunator:
                     f.write(templatestr.format(**paramdict))
 
             self.exec_sql(
-                "INSERT INTO '{0}' VALUES ( {1} );".format(
+                "INSERT INTO '{0}' ( {1} ) VALUES ( {2} );".format(
                     self.currtime,
+                    ", ".join(
+                        {**{'SIM_PATH': simpath}, **paramdict}.keys()
+                    ),
                     ", ".join(
                         map(
                             lambda x: '"' + x +
