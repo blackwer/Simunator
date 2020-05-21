@@ -73,7 +73,7 @@ class Simunator:
 
     def gen_tasks(self, args):
         parser = argparse.ArgumentParser(
-            description="Delete simulation batch.")
+            description="Generate list of tasks for a given simulation set.")
         parser.add_argument('timestamp', type=str,
                             help="Timestamp to process")
         parser.add_argument('--task-file', type=str, help="Output file for tasks",
