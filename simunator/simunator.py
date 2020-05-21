@@ -253,18 +253,19 @@ class Simunator:
             paramdict = {}
             for key, val in zip(self.params, pset):
                 paramdict[key] = val
-            simpath = os.path.join(
+
+            paramdict['SIM_PATH'] = os.path.join(
                 self.inputconfig['system']['pathstring'].format(
                     **{**sim_keywords, **paramdict}),
             )
-            print("Creating path: {0}".format(simpath))
+            print("Creating path: {0}".format(paramdict['SIM_PATH']))
             try:
-                os.makedirs(simpath)
+                os.makedirs(paramdict['SIM_PATH'])
             except:
                 pass
 
             for fname, templatestr in self.templatestrs.items():
-                ofile = os.path.join(simpath, fname)
+                ofile = os.path.join(paramdict['SIM_PATH'], fname)
                 print("Creating file: " + ofile)
                 with open(ofile, "w") as f:
                     f.write(templatestr.format(**paramdict))
@@ -272,16 +273,9 @@ class Simunator:
             self.exec_sql(
                 "INSERT INTO '{0}' ( {1} ) VALUES ( {2} );".format(
                     self.currtime,
-                    ", ".join(
-                        {**{'SIM_PATH': simpath}, **paramdict}.keys()
-                    ),
-                    ", ".join(
-                        map(
-                            lambda x: '"' + x +
-                            '"' if isinstance(x, str) else str(x),
-                            {**{'SIM_PATH': simpath}, **paramdict}.values(),
-                        )
-                    ),
+                    ", ".join(paramdict.keys()),
+                    ", ".join(map(lambda x: '"{}"'.format(x) if isinstance(x, str) else str(x),
+                                  paramdict.values())),
                 ),
             )
 
