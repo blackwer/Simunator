@@ -4,7 +4,6 @@ dists:
   #     params:
   #       kappa:
   #         bounds: [0, 1]
-  #         shortname: k
 
   #       sigma:
   #         bounds: [0, 20]
