@@ -89,6 +89,7 @@ class SimView(QMainWindow):
         # Plot type selector
         self.plotFuncs = {
             # "CSV": self.plotCSV,
+            "Value (pcolor)": self.plot_value_pcolor,
             "Value": self.plot_value,
         }
 
@@ -119,6 +120,16 @@ class SimView(QMainWindow):
             print("Adding {} to yAxis".format(item))
             self.yAxisBox.addItem(item)
         self.selector_layout.addRow("yAxis", self.yAxisBox)
+        self.block_selection_change = False
+
+        # z axis selector
+        self.zAxisBox = QComboBox()
+        self.zAxisBox.currentIndexChanged.connect(self.selection_change)
+        self.zAxisBox.setObjectName("zAxis")
+        for item in self.boxnames:
+            print("Adding {} to zAxis".format(item))
+            self.zAxisBox.addItem(item)
+        self.selector_layout.addRow("zAxis", self.zAxisBox)
         self.block_selection_change = False
 
         # plot button
@@ -222,8 +233,9 @@ class SimView(QMainWindow):
         sortlist = self.plotGroups + [x_field]
         self.simTable = self.simTable.sort_values(by=sortlist)
 
+        self.figure.clear()
         ax = self.figure.add_subplot(111)
-        ax.clear()
+
         if not self.plotGroups:
             ax.scatter(self.simTable[x_field], self.simTable[y_field])
         else:
@@ -233,6 +245,30 @@ class SimView(QMainWindow):
         ax.set_xlabel(x_field)
         ax.set_ylabel(y_field)
         ax.legend()
+        self.canvas.draw()
+
+    def plot_value_pcolor(self):
+        x_field = self.xAxisBox.currentText()
+        y_field = self.yAxisBox.currentText()
+        z_field = self.zAxisBox.currentText()
+        sortlist = self.plotGroups + [x_field, y_field]
+        self.simTable = self.simTable.sort_values(by=sortlist)
+
+        self.figure.clear()
+        ax = self.figure.add_subplot(111)
+
+        import numpy as np
+        xdatasize = len(set(self.simTable[x_field]))
+        ydatasize = len(set(self.simTable[y_field]))
+        xdata = np.array(self.simTable[x_field]).reshape(xdatasize, ydatasize)
+        ydata = np.array(self.simTable[y_field]).reshape(xdatasize, ydatasize)
+        zdata = np.array(self.simTable[z_field]).reshape(xdatasize, ydatasize)
+        pc = ax.pcolormesh(xdata, ydata, zdata)
+
+        ax.set_xlabel(x_field)
+        ax.set_ylabel(y_field)
+        self.figure.colorbar(pc)
+
         self.canvas.draw()
 
 
