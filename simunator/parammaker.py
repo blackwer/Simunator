@@ -39,6 +39,19 @@ class ParamMaker:
         elif self._disttype == "ItemizedList":
             param = list(self._params.keys())[0]
             self._generator = ([el] for el in self._params[param])
+        elif self._disttype == "Halton":
+            param = list(self._params.keys())[0]
+            self._generator = self.halton(
+                [val["bounds"]
+                    for _, val in self._params.items()], self._samples)
+
+    def halton(self, bounds, N):
+        import chaospy
+        dim = len(self._params)
+        unscaled = chaospy.distributions.sampler.sequences.halton.create_halton_samples(
+            N, dim)
+        for i in range(0, N):
+            yield [bounds[j][0] + (bounds[j][1] - bounds[j][0])*unscaled[j][i] for j in range(dim)]
 
     def rand_uniform(self, bounds, N):
         for i in range(0, N):
