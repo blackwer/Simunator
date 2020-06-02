@@ -5,6 +5,7 @@ from parammaker import ParamMaker
 import sqlite3
 import time
 import argparse
+from jinja2 import Template
 
 verbose = False
 
@@ -97,7 +98,7 @@ class Simunator:
             parammap = {**dict(zip(paramlist, paramvals)),
                         **{'SIM_DATE': parsedargs.timestamp}}
             path = parammap['SIM_PATH']
-            cmd = cmds[parsedargs.command].format(**parammap)
+            cmd = Template(cmds[parsedargs.command]).render(**parammap)
             print("cd '{path}'; {cmd}".format(
                 path=path, cmd=cmd), file=outfile)
 
@@ -156,7 +157,7 @@ class Simunator:
             path = os.path.join(os.getcwd(), parammap['SIM_PATH'])
             for cmdpair in cmdpairs:
                 var, cmdtemplate = cmdpair
-                cmdlist = shlex.split(cmdtemplate.format(**parammap))
+                cmdlist = shlex.split(Template(cmdtemplate).render(**parammap))
                 result = subprocess.run(
                     cmdlist, cwd=path, stdout=subprocess.PIPE)
                 val = float(result.stdout.decode('utf-8'))
@@ -255,7 +256,7 @@ class Simunator:
                 paramdict[key] = val
 
             paramdict['SIM_PATH'] = os.path.join(
-                self.inputconfig['system']['pathstring'].format(
+                Template(self.inputconfig['system']['pathstring']).render(
                     **{**sim_keywords, **paramdict}),
             )
             print("Creating path: {0}".format(paramdict['SIM_PATH']))
@@ -266,9 +267,11 @@ class Simunator:
 
             for fname, templatestr in self.templatestrs.items():
                 ofile = os.path.join(paramdict['SIM_PATH'], fname)
+                tm = Template(templatestr)
+
                 print("Creating file: " + ofile)
                 with open(ofile, "w") as f:
-                    f.write(templatestr.format(**paramdict))
+                    f.write(tm.render(**paramdict))
 
             self.exec_sql(
                 "INSERT INTO '{0}' ( {1} ) VALUES ( {2} );".format(
