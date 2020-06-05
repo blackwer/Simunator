@@ -31,7 +31,7 @@ class SimView(QMainWindow):
         self.cursor.execute("SELECT time FROM simunator_runsets;")
         self.tables = [row['time'] for row in self.cursor.fetchall()]
         self.cursor.execute("SELECT * FROM '{}' ;".format(self.tables[0]))
-        self.boxnames = list(
+        self.box_names = list(
             filter(lambda x: x[0:4] != 'SIM_', self.cursor.fetchone().keys()))
         self.curr_vals = dict()
 
@@ -58,7 +58,7 @@ class SimView(QMainWindow):
         self.boxes = dict()
         self.checkboxes = dict()
         self.block_selection_change = True
-        for name in self.boxnames:
+        for name in self.box_names:
             newbox = QComboBox()
             newbox.currentIndexChanged.connect(self.selection_change)
             newbox.setObjectName(name)
@@ -87,49 +87,49 @@ class SimView(QMainWindow):
         self.canvas.setMinimumWidth(800)
 
         # Plot type selector
-        self.plotFuncs = {
+        self.plot_funcs = {
             # "CSV": self.plotCSV,
             "Value (pcolor)": self.plot_value_pcolor,
             "Value": self.plot_value,
         }
 
         # plot function box
-        self.plotBox = QComboBox()
+        self.plot_box = QComboBox()
         self.block_selection_change = True
-        self.plotBox.currentIndexChanged.connect(self.selection_change)
-        self.plotBox.setObjectName("plotFuncs")
-        for key, item in self.plotFuncs.items():
-            self.plotBox.addItem(key)
-        self.selector_layout.addRow("plotFuncs", self.plotBox)
+        self.plot_box.currentIndexChanged.connect(self.selection_change)
+        self.plot_box.setObjectName("plot_funcs")
+        for key, item in self.plot_funcs.items():
+            self.plot_box.addItem(key)
+        self.selector_layout.addRow("plot_funcs", self.plot_box)
 
         # x axis selector
-        self.xAxisBox = QComboBox()
-        self.xAxisBox.currentIndexChanged.connect(self.selection_change)
-        self.xAxisBox.setObjectName("xAxis")
-        for item in self.boxnames:
+        self.x_axis_box = QComboBox()
+        self.x_axis_box.currentIndexChanged.connect(self.selection_change)
+        self.x_axis_box.setObjectName("xAxis")
+        for item in self.box_names:
             print("Adding {} to xAxis".format(item))
-            self.xAxisBox.addItem(item)
-        self.selector_layout.addRow("xAxis", self.xAxisBox)
+            self.x_axis_box.addItem(item)
+        self.selector_layout.addRow("xAxis", self.x_axis_box)
         self.block_selection_change = False
 
         # y axis selector
-        self.yAxisBox = QComboBox()
-        self.yAxisBox.currentIndexChanged.connect(self.selection_change)
-        self.yAxisBox.setObjectName("yAxis")
-        for item in self.boxnames:
+        self.y_axis_box = QComboBox()
+        self.y_axis_box.currentIndexChanged.connect(self.selection_change)
+        self.y_axis_box.setObjectName("yAxis")
+        for item in self.box_names:
             print("Adding {} to yAxis".format(item))
-            self.yAxisBox.addItem(item)
-        self.selector_layout.addRow("yAxis", self.yAxisBox)
+            self.y_axis_box.addItem(item)
+        self.selector_layout.addRow("yAxis", self.y_axis_box)
         self.block_selection_change = False
 
         # z axis selector
-        self.zAxisBox = QComboBox()
-        self.zAxisBox.currentIndexChanged.connect(self.selection_change)
-        self.zAxisBox.setObjectName("zAxis")
-        for item in self.boxnames:
+        self.z_axis_box = QComboBox()
+        self.z_axis_box.currentIndexChanged.connect(self.selection_change)
+        self.z_axis_box.setObjectName("zAxis")
+        for item in self.box_names:
             print("Adding {} to zAxis".format(item))
-            self.zAxisBox.addItem(item)
-        self.selector_layout.addRow("zAxis", self.zAxisBox)
+            self.z_axis_box.addItem(item)
+        self.selector_layout.addRow("zAxis", self.z_axis_box)
         self.block_selection_change = False
 
         # plot button
@@ -148,18 +148,18 @@ class SimView(QMainWindow):
         self.main_layout.addLayout(self.plot_layout)
 
         # Store the selected sims
-        self.simTable: pd.DataFrame
+        self.sim_table: pd.DataFrame
 
         # List of column headers to group plots by
-        self.plotGroups = list()
+        self.plot_groups = list()
 
         self.block_selection_change = False
 
     def collect_groups(self):
-        self.plotGroups = list()
+        self.plot_groups = list()
         for key, val in self.checkboxes.items():
             if val.isChecked():
-                self.plotGroups.append(key)
+                self.plot_groups.append(key)
 
     def build_SQL_query(self):
         filterFlag = False
@@ -199,7 +199,7 @@ class SimView(QMainWindow):
             )
             box.setCurrentText(currText)
 
-        self.simTable = pd.read_sql_query(
+        self.sim_table = pd.read_sql_query(
             query_template.format("*", "", self.table_name), self.conn
         )
 
@@ -210,11 +210,11 @@ class SimView(QMainWindow):
             self.update_combo_boxes()
 
     def plot_button_handler(self):
-        self.simTable = pd.read_sql_query(
+        self.sim_table = pd.read_sql_query(
             self.build_SQL_query().format("*", "", self.table_name), self.conn
         )
 
-        self.plotFuncs[self.plotBox.currentText()]()
+        self.plot_funcs[self.plot_box.currentText()]()
 
     def plot_CSV(self, file):
         ax = self.figure.add_subplot(111)
@@ -228,18 +228,18 @@ class SimView(QMainWindow):
         self.canvas.draw()
 
     def plot_value(self):
-        x_field = self.xAxisBox.currentText()
-        y_field = self.yAxisBox.currentText()
-        sortlist = self.plotGroups + [x_field]
-        self.simTable = self.simTable.sort_values(by=sortlist)
+        x_field = self.x_axis_box.currentText()
+        y_field = self.y_axis_box.currentText()
+        sortlist = self.plot_groups + [x_field]
+        self.sim_table = self.sim_table.sort_values(by=sortlist)
 
         self.figure.clear()
         ax = self.figure.add_subplot(111)
 
-        if not self.plotGroups:
-            ax.scatter(self.simTable[x_field], self.simTable[y_field])
+        if not self.plot_groups:
+            ax.scatter(self.sim_table[x_field], self.sim_table[y_field])
         else:
-            for key, grp in self.simTable.groupby(self.plotGroups):
+            for key, grp in self.sim_table.groupby(self.plot_groups):
                 ax.scatter(grp[x_field], grp[y_field], label=key)
 
         ax.set_xlabel(x_field)
@@ -248,21 +248,21 @@ class SimView(QMainWindow):
         self.canvas.draw()
 
     def plot_value_pcolor(self):
-        x_field = self.xAxisBox.currentText()
-        y_field = self.yAxisBox.currentText()
-        z_field = self.zAxisBox.currentText()
-        sortlist = self.plotGroups + [x_field, y_field]
-        self.simTable = self.simTable.sort_values(by=sortlist)
+        x_field = self.x_axis_box.currentText()
+        y_field = self.y_axis_box.currentText()
+        z_field = self.z_axis_box.currentText()
+        sortlist = self.plot_groups + [x_field, y_field]
+        self.sim_table = self.sim_table.sort_values(by=sortlist)
 
         self.figure.clear()
         ax = self.figure.add_subplot(111)
 
         import numpy as np
-        xdatasize = len(set(self.simTable[x_field]))
-        ydatasize = len(set(self.simTable[y_field]))
-        xdata = np.array(self.simTable[x_field]).reshape(xdatasize, ydatasize)
-        ydata = np.array(self.simTable[y_field]).reshape(xdatasize, ydatasize)
-        zdata = np.array(self.simTable[z_field]).reshape(xdatasize, ydatasize)
+        xdatasize = len(set(self.sim_table[x_field]))
+        ydatasize = len(set(self.sim_table[y_field]))
+        xdata = np.array(self.sim_table[x_field]).reshape(xdatasize, ydatasize)
+        ydata = np.array(self.sim_table[y_field]).reshape(xdatasize, ydatasize)
+        zdata = np.array(self.sim_table[z_field]).reshape(xdatasize, ydatasize)
         pc = ax.pcolormesh(xdata, ydata, zdata)
 
         ax.set_xlabel(x_field)
