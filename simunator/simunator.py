@@ -20,6 +20,7 @@ class Simunator:
                    'delete': self.delete,
                    'collect': self.collect,
                    'listtasks': self.gen_tasks,
+                   'modify': self.modify,
                    }
 
         command = args[0] if len(args) else ''
@@ -124,7 +125,7 @@ class Simunator:
     def create(self, args):
         import yaml
         parser = argparse.ArgumentParser(
-            description="Generation simulation data.")
+            description="Generate simulation hiearchy data.")
         parser.add_argument('config', type=str,
                             help="Config file for Simunator.")
         parsedargs = parser.parse_args(args)
@@ -140,6 +141,23 @@ class Simunator:
         self.get_db()
         self.add_set_to_db()
         self.create_sims()
+
+    def modify(self, args):
+        import yaml
+        parser = argparse.ArgumentParser(
+            description="Replace simulation 'system' configuration, excluding pathstring.")
+        parser.add_argument('config', type=str,
+                            help="Config file for Simunator.")
+        parsedargs = parser.parse_args(args)
+
+        with open(parsedargs.config) as f:
+            self.inputconfig = yaml.load(f, Loader=yaml.FullLoader)
+
+        self.get_db()
+        self.c.execute("DELETE FROM simunator_commands;")
+        self.add_commands()
+        self.c.execute("DELETE FROM simunator_collectors;")
+        self.add_collectors()
 
     def collect(self, args):
         parser = argparse.ArgumentParser(
@@ -228,26 +246,33 @@ class Simunator:
                      );"""
         )
 
-    def add_set_to_db(self):
-        """Adds system information for current simulation set to database and create
-    table that holds the unique combinations of param:value pairs.
-        """
+    def add_runsets(self):
         self.c.execute("INSERT INTO simunator_runsets VALUES ( ?, ?, ? );", (
             self.currtime,
             self.inputconfig["system"]["pathstring"],
             str(self.templatestrs)))
 
+    def add_commands(self):
         for cmdname, cmdtemplate in self.inputconfig["system"]["commands"].items():
             self.c.execute(
                 "INSERT INTO simunator_commands VALUES ( ?, ? );",
                 (cmdname, cmdtemplate)
             )
 
+    def add_collectors(self):
         for collectname, collect_params in self.inputconfig["system"]["collectors"].items():
             self.c.execute(
                 "INSERT INTO simunator_collectors VALUES ( ?, ? );",
                 (collectname, collect_params['command'])
             )
+
+    def add_set_to_db(self):
+        """Adds system information for current simulation set to database and create
+    table that holds the unique combinations of param:value pairs.
+        """
+        self.add_runsets()
+        self.add_commands()
+        self.add_collectors()
 
         paramstr = "SIM_PATH STRING"
         for param, valexample in zip(self.params, self.psets[0]):
