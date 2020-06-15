@@ -127,8 +127,6 @@ class Simunator:
             description="Generation simulation data.")
         parser.add_argument('config', type=str,
                             help="Config file for Simunator.")
-        parser.add_argument('--taskfile', type=str, help="Output file for tasks",
-                            dest='taskfile', default='sys.stdout')
         parsedargs = parser.parse_args(args)
 
         with open(parsedargs.config) as f:
