@@ -278,13 +278,10 @@ class Simunator:
         for param, valexample in zip(self.params, self.psets[0]):
             paramstr += ", " + param + " STRING" if isinstance(
                 valexample, str) else ", " + param + " NUMERIC"
-        for collector in self.inputconfig["system"]["collectors"].keys():
-            try:
-                collectortype = self.inputconfig["system"]["collectors"][collector]['type'].upper(
-                )
-            except KeyError:
-                collectortype = 'NUMERIC'
 
+        collectors = self.inputconfig["system"]["collectors"]
+        for collector in collectors.keys():
+            collectortype = collectors.get('type', 'NUMERIC').upper()
             paramstr += ", " + collector + " " + collectortype
 
         self.c.execute(
@@ -301,6 +298,7 @@ class Simunator:
             paramdict = dict(zip(self.params, pset))
 
             paramdict['SIM_PATH'] = os.path.join(
+                currpath,
                 Template(self.inputconfig['system']['pathstring']).render(
                     **{**sim_keywords, **paramdict}),
             )
