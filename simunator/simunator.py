@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 import sys
 import os
-from parammaker import ParamMaker
+from simunator.parammaker import ParamMaker
 import sqlite3
 import time
 import argparse
 import numpy as np
 from jinja2 import Template
-
+import io
 
 class Simunator:
     db = "simunator.db"
@@ -367,7 +367,3 @@ class Simunator:
                 ),
                 tuple(paramdict.values()),
             )
-
-
-if __name__ == "__main__":
-    sims = Simunator(sys.argv[1:])
