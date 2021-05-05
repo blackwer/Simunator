@@ -9,6 +9,7 @@ import numpy as np
 from jinja2 import Template
 import io
 
+
 class Simunator:
     db = "simunator.db"
 
@@ -64,14 +65,8 @@ class Simunator:
         def gmt(x):
             return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(x)))
 
-        print(
-            "\n".join(
-                [
-                    "{timestamp}  ({gmt} GMT)".format(timestamp=tup[0], gmt=gmt(tup[0]))
-                    for tup in self.c.fetchall()
-                ]
-            )
-        )
+        print("\n".join(
+            ["{timestamp}  ({gmt} GMT)".format(timestamp=tup[0], gmt=gmt(tup[0])) for tup in self.c.fetchall()]))
 
     def delete(self, args):
         parser = argparse.ArgumentParser(description="Delete simulation batch.")
@@ -87,7 +82,9 @@ class Simunator:
         for paramvals in sims:
             parammap = {
                 **dict(zip(paramlist, paramvals)),
-                **{"SIM_DATE": parsedargs.timestamp},
+                **{
+                    "SIM_DATE": parsedargs.timestamp
+                },
             }
             path = parammap["SIM_PATH"]
 
@@ -99,14 +96,10 @@ class Simunator:
                 print("Error: {0} - {1}.".format(e.filename, e.strerror))
 
         self.c.execute("DROP TABLE '{0}';".format(parsedargs.timestamp))
-        self.c.execute(
-            "DELETE FROM simunator_runsets WHERE time=?;", (parsedargs.timestamp,)
-        )
+        self.c.execute("DELETE FROM simunator_runsets WHERE time=?;", (parsedargs.timestamp, ))
 
     def gen_tasks(self, args):
-        parser = argparse.ArgumentParser(
-            description="Generate list of tasks for a given simulation set."
-        )
+        parser = argparse.ArgumentParser(description="Generate list of tasks for a given simulation set.")
         parser.add_argument("timestamp", type=str, help="Timestamp to process")
         parser.add_argument(
             "--task-file",
@@ -137,7 +130,9 @@ class Simunator:
             paramlist = paramvals.keys()
             parammap = {
                 **dict(zip(paramlist, paramvals)),
-                **{"SIM_DATE": parsedargs.timestamp},
+                **{
+                    "SIM_DATE": parsedargs.timestamp
+                },
             }
             path = parammap["SIM_PATH"]
             cmd = Template(cmds[parsedargs.command]).render(**parammap)
@@ -146,9 +141,7 @@ class Simunator:
     def create(self, args):
         import yaml
 
-        parser = argparse.ArgumentParser(
-            description="Generate simulation hiearchy data."
-        )
+        parser = argparse.ArgumentParser(description="Generate simulation hiearchy data.")
         parser.add_argument("config", type=str, help="Config file for Simunator.")
         parsedargs = parser.parse_args(args)
 
@@ -167,9 +160,7 @@ class Simunator:
     def modify(self, args):
         import yaml
 
-        parser = argparse.ArgumentParser(
-            description="Replace simulation 'system' configuration, excluding pathstring."
-        )
+        parser = argparse.ArgumentParser(description="Replace simulation 'system' configuration, excluding pathstring.")
         parser.add_argument("config", type=str, help="Config file for Simunator.")
         parsedargs = parser.parse_args(args)
 
@@ -203,7 +194,7 @@ class Simunator:
         if parsedargs.collector:
             self.c.execute(
                 "SELECT cmdname, cmdtemplate FROM simunator_collectors WHERE cmdname == ?;",
-                (parsedargs.collector,),
+                (parsedargs.collector, ),
             )
             cmdpairs = self.c.fetchall()
         else:
@@ -216,27 +207,26 @@ class Simunator:
         for paramvals in sims:
             parammap = {
                 **dict(zip(paramlist, paramvals)),
-                **{"SIM_DATE": parsedargs.timestamp},
+                **{
+                    "SIM_DATE": parsedargs.timestamp
+                },
             }
             path = os.path.join(os.getcwd(), parammap["SIM_PATH"])
             for cmdpair in cmdpairs:
                 var, cmdtemplate = cmdpair
                 cmd = Template(cmdtemplate).render(**parammap)
-                result = subprocess.run(
-                    cmd, cwd=path, stdout=subprocess.PIPE, shell=True
-                )
+                result = subprocess.run(cmd, cwd=path, stdout=subprocess.PIPE, shell=True)
 
-                val = np.loadtxt(
-                    io.StringIO(result.stdout.decode("utf-8")), delimiter=" "
-                )
+                val = np.loadtxt(io.StringIO(result.stdout.decode("utf-8")), delimiter=" ")
 
                 # FIXME: The type of the column should set this, not the parsed result
                 val = float(val) if val.size == 1 else val
 
-                exectemplate = "UPDATE '{0}' SET '{1}' = ? where rowid == ?;".format(
-                    parsedargs.timestamp, var
-                )
-                self.c.execute(exectemplate, (val, paramvals["rowid"],))
+                exectemplate = "UPDATE '{0}' SET '{1}' = ? where rowid == ?;".format(parsedargs.timestamp, var)
+                self.c.execute(exectemplate, (
+                    val,
+                    paramvals["rowid"],
+                ))
 
     def gen_param_sets(self):
         """Creates a parammaker object that generates all unique combinations of
@@ -244,9 +234,7 @@ class Simunator:
     of the generators into a list.
         """
         pmaker = ParamMaker()
-        pmaker.from_param_makers(
-            *[ParamMaker(dist) for dist in self.inputconfig["dists"]]
-        )
+        pmaker.from_param_makers(*[ParamMaker(dist) for dist in self.inputconfig["dists"]])
         self.params, self.psets = pmaker.actualize()
 
     def gen_template_strings(self):
@@ -263,21 +251,15 @@ class Simunator:
         self.conn = sqlite3.connect(self.db)
         self.conn.row_factory = sqlite3.Row
         self.c = self.conn.cursor()
-        self.c.execute(
-            """CREATE TABLE IF NOT EXISTS simunator_runsets (
+        self.c.execute("""CREATE TABLE IF NOT EXISTS simunator_runsets (
                             time TEXT, pathstring TEXT, templatestr TEXT
-                     );"""
-        )
-        self.c.execute(
-            """CREATE TABLE IF NOT EXISTS simunator_commands (
+                     );""")
+        self.c.execute("""CREATE TABLE IF NOT EXISTS simunator_commands (
                             cmdname TEXT, cmdtemplate TEXT
-                     );"""
-        )
-        self.c.execute(
-            """CREATE TABLE IF NOT EXISTS simunator_collectors (
+                     );""")
+        self.c.execute("""CREATE TABLE IF NOT EXISTS simunator_collectors (
                             cmdname TEXT, cmdtemplate TEXT
-                     );"""
-        )
+                     );""")
 
     def add_runsets(self):
         self.c.execute(
@@ -297,12 +279,10 @@ class Simunator:
             )
 
     def add_collectors(self):
-        for collectname, collect_params in self.inputconfig["system"][
-            "collectors"
-        ].items():
+        for collectname, collect_template in self.inputconfig["system"]["collectors"].items():
             self.c.execute(
                 "INSERT INTO simunator_collectors VALUES ( ?, ? );",
-                (collectname, collect_params["command"]),
+                (collectname, collect_template),
             )
 
     def add_set_to_db(self):
@@ -315,22 +295,17 @@ class Simunator:
 
         paramstr = "SIM_PATH STRING"
         for param, valexample in zip(self.params, self.psets[0]):
-            paramstr += (
-                ", " + param + " STRING"
-                if isinstance(valexample, str)
-                else ", " + param + " NUMERIC"
-            )
+            paramstr += (", " + param + " STRING" if isinstance(valexample, str) else ", " + param + " NUMERIC")
 
         collectors = self.inputconfig["system"]["collectors"]
         for collector in collectors.keys():
             collectortype = collectors.get("type", "NUMERIC").upper()
             paramstr += ", " + collector + " " + collectortype
 
-        self.c.execute(
-            "CREATE TABLE IF NOT EXISTS '{0}' ( {1} );".format(
-                str(self.currtime), paramstr,
-            )
-        )
+        self.c.execute("CREATE TABLE IF NOT EXISTS '{0}' ( {1} );".format(
+            str(self.currtime),
+            paramstr,
+        ))
 
     def create_sims(self):
         """Write simulation information to disk for actual running."""
@@ -341,9 +316,10 @@ class Simunator:
 
             paramdict["SIM_PATH"] = os.path.join(
                 currpath,
-                Template(self.inputconfig["system"]["pathstring"]).render(
-                    **{**sim_keywords, **paramdict}
-                ),
+                Template(self.inputconfig["system"]["pathstring"]).render(**{
+                    **sim_keywords,
+                    **paramdict
+                }),
             )
             print("Creating path: {0}".format(paramdict["SIM_PATH"]))
             try:

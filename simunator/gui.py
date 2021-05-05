@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-
 import sqlite3
 from PyQt5.QtWidgets import QApplication, QWidget
 from PyQt5.QtWidgets import (
@@ -31,8 +30,7 @@ class SimView(QMainWindow):
         self.cursor.execute("SELECT time FROM simunator_runsets;")
         self.tables = [row['time'] for row in self.cursor.fetchall()]
         self.cursor.execute("SELECT * FROM '{}' ;".format(self.tables[0]))
-        self.box_names = list(
-            filter(lambda x: x[0:4] != 'SIM_', self.cursor.fetchone().keys()))
+        self.box_names = list(filter(lambda x: x[0:4] != 'SIM_', self.cursor.fetchone().keys()))
         self.curr_vals = dict()
 
         self.setWindowTitle("SimView")
@@ -184,24 +182,15 @@ class SimView(QMainWindow):
             box.clear()
             box.addItem("<any>")
 
-            mainquery = query_template.format(
-                "DISTINCT", boxname, self.table_name)
+            mainquery = query_template.format("DISTINCT", boxname, self.table_name)
 
             self.cursor = self.conn.execute(mainquery)
-            self.curr_vals[boxname] = [row[boxname]
-                                       for row in self.cursor.fetchall()]
+            self.curr_vals[boxname] = [row[boxname] for row in self.cursor.fetchall()]
             box.addItems(
-                [
-                    str(val) if not isinstance(
-                        val, str) else '"{}"'.format(val)
-                    for val in self.curr_vals[boxname]
-                ]
-            )
+                [str(val) if not isinstance(val, str) else '"{}"'.format(val) for val in self.curr_vals[boxname]])
             box.setCurrentText(currText)
 
-        self.sim_table = pd.read_sql_query(
-            query_template.format("*", "", self.table_name), self.conn
-        )
+        self.sim_table = pd.read_sql_query(query_template.format("*", "", self.table_name), self.conn)
 
         self.block_selection_change = False
 
@@ -210,9 +199,7 @@ class SimView(QMainWindow):
             self.update_combo_boxes()
 
     def plot_button_handler(self):
-        self.sim_table = pd.read_sql_query(
-            self.build_SQL_query().format("*", "", self.table_name), self.conn
-        )
+        self.sim_table = pd.read_sql_query(self.build_SQL_query().format("*", "", self.table_name), self.conn)
 
         self.plot_funcs[self.plot_box.currentText()]()
 
