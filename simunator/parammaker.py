@@ -3,7 +3,7 @@ import numpy as np
 
 
 class ParamMaker:
-    def __init__(self, indist: dict = {}):
+    def __init__(self, indist: dict = None):
         """
 
         """
