@@ -2,7 +2,7 @@
 import sys
 import os
 from simunator.parammaker import ParamMaker
-import time
+import shutil
 import datetime
 import argparse
 import numpy as np
@@ -74,33 +74,21 @@ class Simunator:
 
     def delete(self, args):
         parser = argparse.ArgumentParser(description="Delete simulation batch.")
-        parser.add_argument("timestamp", type=str, help="Timestamp to process")
+        parser.add_argument("runset", type=str, help="ID of runset to process")
         parsedargs = parser.parse_args(args)
 
-        self.get_db()
-
-        self.c.execute("SELECT * from '{0}';".format(parsedargs.timestamp))
-        sims = self.c.fetchall()
-        paramlist = sims[0].keys()
-
-        for paramvals in sims:
-            parammap = {
-                **dict(zip(paramlist, paramvals)),
-                **{
-                    "SIM_DATE": parsedargs.timestamp
-                },
-            }
-            path = parammap["SIM_PATH"]
-
-            import shutil
-
+        simpaths = [
+            row['Path'] for row in self.dssc.read_rows_sql("SELECT Path from simunator_sims where RunsetID = {}".format(
+                parsedargs.runset))
+        ]
+        for path in simpaths:
             try:
                 shutil.rmtree(path)
             except OSError as e:
                 print("Error: {0} - {1}.".format(e.filename, e.strerror))
 
-        self.c.execute("DROP TABLE '{0}';".format(parsedargs.timestamp))
-        self.c.execute("DELETE FROM simunator_runsets WHERE time=?;", (parsedargs.timestamp, ))
+        self.dssc.execute("DELETE FROM simunator_runsets WHERE RunsetID = {}".format(parsedargs.runset))
+        self.dssc.commit_tables("Delete runset {}".format(parsedargs.runset))
 
     def gen_tasks(self, args):
         parser = argparse.ArgumentParser(description="Generate list of tasks for a given simulation set.")
@@ -282,7 +270,8 @@ class Simunator:
                                    RunsetID INTEGER NOT NULL,
                                    Path LONGTEXT NOT NULL,
                                    PRIMARY KEY (SimID),
-                                   FOREIGN KEY (RunsetID) REFERENCES simunator_runsets(RunsetID))""")
+                                   FOREIGN KEY (RunsetID) REFERENCES simunator_runsets(RunsetID)
+                                           ON DELETE CASCADE)""")
 
         if "simunator_param_vals" not in tables:
             self.dssc.execute("""CREATE TABLE simunator_param_vals
@@ -291,7 +280,8 @@ class Simunator:
                                    Value DOUBLE PRECISION,
                                    PRIMARY KEY (ParamID, SimID),
                                    FOREIGN KEY (ParamID) REFERENCES simunator_params(ParamID),
-                                   FOREIGN KEY (SimID) REFERENCES simunator_sims(SimID))""")
+                                   FOREIGN KEY (SimID) REFERENCES simunator_sims(SimID)
+                                           ON DELETE CASCADE)""")
         if "simunator_result_vals" not in tables:
             self.dssc.execute("""CREATE TABLE simunator_result_vals
                                   (CollectorID VARCHAR(256),
@@ -299,7 +289,8 @@ class Simunator:
                                    Value DOUBLE PRECISION,
                                    PRIMARY KEY (CollectorID, SimID),
                                    FOREIGN KEY (CollectorID) REFERENCES simunator_collectors(CollectorID),
-                                   FOREIGN KEY (SimID) REFERENCES simunator_sims(SimID))""")
+                                   FOREIGN KEY (SimID) REFERENCES simunator_sims(SimID)
+                                           ON DELETE CASCADE)""")
 
     def add_runset(self):
         self.dssc.write_rows("simunator_runsets", [{
