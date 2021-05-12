@@ -92,7 +92,7 @@ class Simunator:
 
     def gen_tasks(self, args):
         parser = argparse.ArgumentParser(description="Generate list of tasks for a given simulation set.")
-        parser.add_argument("timestamp", type=str, help="Timestamp to process")
+        parser.add_argument("runset", type=str, help="RunsetID to process")
         parser.add_argument(
             "--task-file",
             type=str,
@@ -111,23 +111,29 @@ class Simunator:
 
         outfile = open(parsedargs.taskfile, "w") if parsedargs.taskfile else sys.stdout
 
-        self.get_db()
+        cmdrows = self.dssc.read_rows_sql("SELECT CmdName, CmdTemplate FROM simunator_commands")
+        cmdtemplatestr = next((row["CmdTemplate"] for row in cmdrows if row["CmdName"] == parsedargs.command), None)
+        if not cmdtemplatestr:
+            print("Command not found: '{}'".format(parsedargs.command))
+            return
+        cmdtemplate = Template(cmdtemplatestr)
 
-        self.c.execute("SELECT cmdname, cmdtemplate FROM simunator_commands;")
-        cmds = dict(self.c.fetchall())
+        tsrow = self.dssc.read_rows_sql("SELECT TimeStamp from simunator_runsets where RunsetID = {}".format(
+            parsedargs.runset))
+        if not len(tsrow):
+            print("RunsetID '{}' not found".format(parsedargs.runset))
+            return
+        ts = tsrow[0]['TimeStamp']
 
-        self.c.execute("SELECT * from '{0}';".format(parsedargs.timestamp))
-
-        for paramvals in self.c.fetchall():
-            paramlist = paramvals.keys()
-            parammap = {
-                **dict(zip(paramlist, paramvals)),
-                **{
-                    "SIM_DATE": parsedargs.timestamp
-                },
-            }
-            path = parammap["SIM_PATH"]
-            cmd = Template(cmds[parsedargs.command]).render(**parammap)
+        querystr = """SELECT Path, ParamID, Value FROM simunator_sims
+                         INNER JOIN simunator_param_vals ON
+                         simunator_sims.SimID=simunator_param_vals.SimID
+                         WHERE simunator_sims.RunsetID = {}""".format(parsedargs.runset)
+        rows = self.dssc.read_rows_sql(querystr)
+        for row in rows:
+            path = row["Path"]
+            parammap = {**row, "SIM_DATE": ts}
+            cmd = cmdtemplate.render(**parammap)
             print("cd '{path}'; {cmd}".format(path=path, cmd=cmd), file=outfile)
 
     def create(self, args):
