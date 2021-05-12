@@ -2,20 +2,25 @@
 import sys
 import os
 from simunator.parammaker import ParamMaker
-import sqlite3
 import time
+import datetime
 import argparse
 import numpy as np
 from jinja2 import Template
 import io
+from doltpy.sql import DoltSQLServerContext
+
+# sqlalchemy incorrectly detects dolt as a standard mysql server and runs this routine which
+# fails when the database has foreign keys
+from sqlalchemy.dialects.mysql.base import MySQLDialect
+
+MySQLDialect._correct_for_mysql_bugs_88718_96365 = lambda *args: None
 
 
 class Simunator:
-    db = "simunator.db"
-
-    def __init__(self, args):
-        self.add_custom_sqlite_types()
-
+    def __init__(self, dssc: DoltSQLServerContext, args: list):
+        # self.add_custom_sqlite_types()
+        self.dssc = dssc
         actions = {
             "create": self.create,
             "list": self.list_sims,
@@ -38,8 +43,6 @@ class Simunator:
         else:
             actions[command](args)
 
-        self.conn.commit()
-
     def add_custom_sqlite_types(self):
         def adapt_array(arr):
             out = io.BytesIO()
@@ -59,14 +62,15 @@ class Simunator:
         sqlite3.register_converter("array", convert_array)
 
     def list_sims(self, args):
-        self.get_db()
-        self.c.execute("SELECT time FROM simunator_runsets;")
-
-        def gmt(x):
-            return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(x)))
-
-        print("\n".join(
-            ["{timestamp}  ({gmt} GMT)".format(timestamp=tup[0], gmt=gmt(tup[0])) for tup in self.c.fetchall()]))
+        res = self.dssc.read_rows_sql("SELECT RunsetID, TimeStamp, Path FROM simunator_runsets")
+        params = {
+            row['ParamID']: "{{{{{}}}}}".format(row['ParamID'])
+            for row in self.dssc.read_rows_sql("SELECT ParamID FROM simunator_params")
+        }
+        print("RunsetID\tTimeStamp\t\tPath")
+        for row in res:
+            path = Template(row["Path"]).render(**{**params, 'SIM_DATE': row['TimeStamp']})
+            print("{}\t\t{}\t{}".format(row["RunsetID"], row["TimeStamp"], path))
 
     def delete(self, args):
         parser = argparse.ArgumentParser(description="Delete simulation batch.")
@@ -148,7 +152,8 @@ class Simunator:
         with open(parsedargs.config) as f:
             self.inputconfig = yaml.load(f, Loader=yaml.FullLoader)
 
-        self.currtime = time.strftime("%s", time.gmtime())
+        self.currtime = str(datetime.datetime.now().replace(microsecond=0))
+        print(self.currtime)
 
         self.gen_param_sets()
         self.gen_template_strings()
@@ -230,8 +235,8 @@ class Simunator:
 
     def gen_param_sets(self):
         """Creates a parammaker object that generates all unique combinations of
-    parameters as specified by input yaml file, and a psets list, the actualization
-    of the generators into a list.
+        parameters as specified by input yaml file, and a psets list, the actualization
+        of the generators into a list.
         """
         pmaker = ParamMaker()
         pmaker.from_param_makers(*[ParamMaker(dist) for dist in self.inputconfig["dists"]])
@@ -246,100 +251,136 @@ class Simunator:
 
     def get_db(self):
         """Opens or creates sqlite3 database that contains simulation information for
-    faithful reproduction of simulation run information.
+        faithful reproduction of simulation run information.
         """
-        self.conn = sqlite3.connect(self.db)
-        self.conn.row_factory = sqlite3.Row
-        self.c = self.conn.cursor()
-        self.c.execute("""CREATE TABLE IF NOT EXISTS simunator_runsets (
-                            time TEXT, pathstring TEXT, templatestr TEXT
-                     );""")
-        self.c.execute("""CREATE TABLE IF NOT EXISTS simunator_commands (
-                            cmdname TEXT, cmdtemplate TEXT
-                     );""")
-        self.c.execute("""CREATE TABLE IF NOT EXISTS simunator_collectors (
-                            cmdname TEXT, cmdtemplate TEXT
-                     );""")
+        tables = [row['Table'] for row in self.dssc.read_rows_sql("SHOW TABLES")]
+        # tables = [table.name for table in self.db.ls()]
 
-    def add_runsets(self):
-        self.c.execute(
-            "INSERT INTO simunator_runsets VALUES ( ?, ?, ? );",
-            (
-                self.currtime,
-                self.inputconfig["system"]["pathstring"],
-                str(self.templatestrs),
-            ),
+        self.dssc.execute("""CREATE TABLE IF NOT EXISTS simunator_commands
+                              (CmdName VARCHAR(256) NOT NULL,
+                               CmdTemplate LONGTEXT NOT NULL,
+                               PRIMARY KEY (CmdName));""")
+        self.dssc.execute("""CREATE TABLE IF NOT EXISTS simunator_collectors
+                              (CollectorID VARCHAR(256) NOT NULL,
+                               CmdTemplate LONGTEXT NOT NULL,
+                               PRIMARY KEY (CollectorID));""")
+        self.dssc.execute(
+            "CREATE TABLE IF NOT EXISTS simunator_params (ParamID VARCHAR(256) NOT NULL, ParamType VARCHAR(256), PRIMARY KEY (ParamID));"
         )
+        #
+        if "simunator_runsets" not in tables:
+            self.dssc.execute("""CREATE TABLE IF NOT EXISTS simunator_runsets
+                                  (RunsetID INTEGER AUTO_INCREMENT,
+                                   TimeStamp DATETIME NOT NULL,
+                                   Path LONGTEXT NOT NULL,
+                                   Template LONGTEXT NOT NULL,
+                                   PRIMARY KEY (RunsetID))""")
+
+        if "simunator_sims" not in tables:
+            self.dssc.execute("""CREATE TABLE IF NOT EXISTS simunator_sims
+                                  (SimID INTEGER AUTO_INCREMENT,
+                                   RunsetID INTEGER NOT NULL,
+                                   Path LONGTEXT NOT NULL,
+                                   PRIMARY KEY (SimID),
+                                   FOREIGN KEY (RunsetID) REFERENCES simunator_runsets(RunsetID))""")
+
+        if "simunator_param_vals" not in tables:
+            self.dssc.execute("""CREATE TABLE simunator_param_vals
+                                  (ParamID VARCHAR(256),
+                                   SimID INT,
+                                   Value DOUBLE PRECISION,
+                                   PRIMARY KEY (ParamID, SimID),
+                                   FOREIGN KEY (ParamID) REFERENCES simunator_params(ParamID),
+                                   FOREIGN KEY (SimID) REFERENCES simunator_sims(SimID))""")
+        if "simunator_result_vals" not in tables:
+            self.dssc.execute("""CREATE TABLE simunator_result_vals
+                                  (CollectorID VARCHAR(256),
+                                   SimID INT,
+                                   Value DOUBLE PRECISION,
+                                   PRIMARY KEY (CollectorID, SimID),
+                                   FOREIGN KEY (CollectorID) REFERENCES simunator_collectors(CollectorID),
+                                   FOREIGN KEY (SimID) REFERENCES simunator_sims(SimID))""")
+
+    def add_runset(self):
+        self.dssc.write_rows("simunator_runsets", [{
+            'TimeStamp': self.currtime,
+            'Path': self.inputconfig["system"]["pathstring"],
+            'Template': str(self.templatestrs)
+        }],
+                             primary_key=['RunsetID'])
+        self.runset_id = self.dssc.read_rows_sql("SELECT LAST_INSERT_ID();")[0]["LAST_INSERT_ID()"]
+        print("Added runset: {}".format(self.runset_id))
 
     def add_commands(self):
-        for cmdname, cmdtemplate in self.inputconfig["system"]["commands"].items():
-            self.c.execute(
-                "INSERT INTO simunator_commands VALUES ( ?, ? );",
-                (cmdname, cmdtemplate),
-            )
+        rows = [{'CmdName': name, 'CmdTemplate': cmd} for name, cmd in self.inputconfig["system"]["commands"].items()]
+        self.dssc.write_rows("simunator_commands", rows)
 
     def add_collectors(self):
-        for collectname, collect_template in self.inputconfig["system"]["collectors"].items():
-            self.c.execute(
-                "INSERT INTO simunator_collectors VALUES ( ?, ? );",
-                (collectname, collect_template),
-            )
+        rows = [{
+            'CollectorID': name,
+            'CmdTemplate': template
+        } for name, template in self.inputconfig["system"]["collectors"].items()]
+        self.dssc.write_rows("simunator_collectors", rows)
+
+    def add_params(self):
+        rows = [{
+            "ParamID": key,
+            "ParamType": 'double'
+        } for key in self.params] + [{
+            "ParamID": "SIM_PATH",
+            "ParamType": "string"
+        }]
+        self.dssc.write_rows("simunator_params", rows)
 
     def add_set_to_db(self):
         """Adds system information for current simulation set to database and create
-    table that holds the unique combinations of param:value pairs.
+        table that holds the unique combinations of param:value pairs.
         """
-        self.add_runsets()
+        self.add_runset()
         self.add_commands()
         self.add_collectors()
-
-        paramstr = "SIM_PATH STRING"
-        for param, valexample in zip(self.params, self.psets[0]):
-            paramstr += (", " + param + " STRING" if isinstance(valexample, str) else ", " + param + " NUMERIC")
-
-        collectors = self.inputconfig["system"]["collectors"]
-        for collector in collectors.keys():
-            collectortype = collectors.get("type", "NUMERIC").upper()
-            paramstr += ", " + collector + " " + collectortype
-
-        self.c.execute("CREATE TABLE IF NOT EXISTS '{0}' ( {1} );".format(
-            str(self.currtime),
-            paramstr,
-        ))
+        self.add_params()
+        if not self.dssc.dolt.status().is_clean:
+            self.dssc.commit_tables("Add runset {}".format(self.runset_id))
 
     def create_sims(self):
         """Write simulation information to disk for actual running."""
         currpath = os.getcwd()
         sim_keywords = {"SIM_DATE": self.currtime}
+
         for pset in self.psets:
             paramdict = dict(zip(self.params, pset))
 
-            paramdict["SIM_PATH"] = os.path.join(
+            sim_path = os.path.join(
                 currpath,
                 Template(self.inputconfig["system"]["pathstring"]).render(**{
                     **sim_keywords,
                     **paramdict
                 }),
             )
-            print("Creating path: {0}".format(paramdict["SIM_PATH"]))
+            self.dssc.execute("INSERT INTO simunator_sims (SimID, RunsetID, Path) VALUES(NULL, {0}, '{1}');".format(
+                self.runset_id, sim_path))
+            sim_id = self.dssc.read_rows_sql("SELECT LAST_INSERT_ID();")[0]["LAST_INSERT_ID()"]
+            print(sim_id)
+
+            print("Creating path: {0}".format(sim_path))
             try:
-                os.makedirs(paramdict["SIM_PATH"])
+                os.makedirs(sim_path)
             except:
                 pass
 
             for fname, templatestr in self.templatestrs.items():
-                ofile = os.path.join(paramdict["SIM_PATH"], fname)
+                ofile = os.path.join(sim_path, fname)
                 tm = Template(templatestr)
 
                 print("Creating file: " + ofile)
                 with open(ofile, "w") as f:
                     f.write(tm.render(**paramdict))
 
-            self.c.execute(
-                "INSERT INTO '{0}' ( {1} ) VALUES ( {2} );".format(
-                    self.currtime,
-                    ", ".join(paramdict.keys()),
-                    ("?, " * len(paramdict.values())).rstrip(", "),
-                ),
-                tuple(paramdict.values()),
-            )
+            for param_id, val in paramdict.items():
+                self.dssc.execute(
+                    "INSERT INTO simunator_param_vals (ParamID, SimID, Value) VALUES('{}', {}, {})".format(
+                        param_id, sim_id, val))
+
+        if not self.dssc.dolt.status().is_clean:
+            self.dssc.commit_tables("Add simulations for runset {}".format(self.runset_id))

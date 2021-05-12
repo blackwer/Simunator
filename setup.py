@@ -11,6 +11,6 @@ setup(
     license="Apache 2.0",
     license_files=('LICENSE'),
     packages=["simunator"],
-    install_requires=["numpy", "jinja2"],
+    install_requires=["numpy", "jinja2", "doltpy"],
     scripts=['bin/simunator'],
 )

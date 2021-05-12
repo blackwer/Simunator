@@ -1,6 +1,22 @@
 #!/usr/bin/env python3
+import os
 import sys
+from doltpy.cli import Dolt
+from doltpy.sql import DoltSQLServerContext, ServerConfig
 from simunator.simunator import Simunator
 
 if __name__ == "__main__":
-    sims = Simunator(sys.argv[1:])
+    try:
+        db = Dolt(os.getcwd())
+    except ValueError:
+        db = Dolt.init(os.getcwd())
+        if not db.status().is_clean:
+            db.add('-A')
+            db.commit('Add docs')
+    except Exception as ex:
+        print("Unknown exception. Unable to open or create dolt database.")
+        print("Error of type: {}".format(type(ex).__name__))
+        sys.exit()
+
+    with DoltSQLServerContext(db, ServerConfig(user='root')) as dssc:
+        sims = Simunator(dssc, sys.argv[1:])
