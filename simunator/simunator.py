@@ -8,6 +8,8 @@ import argparse
 import numpy as np
 from jinja2 import Template
 import io
+import yaml
+import subprocess
 from doltpy.sql import DoltSQLServerContext
 
 # sqlalchemy incorrectly detects dolt as a standard mysql server and runs this routine which
@@ -19,7 +21,6 @@ MySQLDialect._correct_for_mysql_bugs_88718_96365 = lambda *args: None
 
 class Simunator:
     def __init__(self, dssc: DoltSQLServerContext, args: list):
-        # self.add_custom_sqlite_types()
         self.dssc = dssc
         actions = {
             "create": self.create,
@@ -90,6 +91,30 @@ class Simunator:
         self.dssc.execute("DELETE FROM simunator_runsets WHERE RunsetID = {}".format(parsedargs.runset))
         self.dssc.commit_tables("Delete runset {}".format(parsedargs.runset))
 
+    def get_sims_from_runset(self, runset: int):
+        querystr = """SELECT simunator_sims.SimID, Path, ParamID, Value FROM simunator_sims
+                         INNER JOIN simunator_param_vals ON
+                         simunator_sims.SimID=simunator_param_vals.SimID
+                         WHERE simunator_sims.RunsetID = {}""".format(runset)
+        return self.dssc.read_rows_sql(querystr)
+
+    def get_commands_from_runset(self, runset: int, table: str, name: str = None):
+        cmdrows = self.dssc.read_rows_sql("SELECT Name, Template FROM {}".format(table))
+        if name:
+            cmdrows = [row for row in cmdrows if row["Name"] == name]
+            if not len(cmdrows):
+                print("Command '{}' not found in table '{}'".format(name, table))
+                sys.exit()
+            return cmdrows[0]
+        return cmdrows
+
+    def get_timestamp_from_runset(self, runset: int):
+        tsrow = self.dssc.read_rows_sql("SELECT TimeStamp from simunator_runsets where RunsetID = {}".format(runset))
+        if not len(tsrow):
+            print("RunsetID '{}' not found".format(runset))
+            sys.exit()
+        return tsrow[0]['TimeStamp']
+
     def gen_tasks(self, args):
         parser = argparse.ArgumentParser(description="Generate list of tasks for a given simulation set.")
         parser.add_argument("runset", type=str, help="RunsetID to process")
@@ -111,34 +136,17 @@ class Simunator:
 
         outfile = open(parsedargs.taskfile, "w") if parsedargs.taskfile else sys.stdout
 
-        cmdrows = self.dssc.read_rows_sql("SELECT CmdName, CmdTemplate FROM simunator_commands")
-        cmdtemplatestr = next((row["CmdTemplate"] for row in cmdrows if row["CmdName"] == parsedargs.command), None)
-        if not cmdtemplatestr:
-            print("Command not found: '{}'".format(parsedargs.command))
-            return
-        cmdtemplate = Template(cmdtemplatestr)
-
-        tsrow = self.dssc.read_rows_sql("SELECT TimeStamp from simunator_runsets where RunsetID = {}".format(
-            parsedargs.runset))
-        if not len(tsrow):
-            print("RunsetID '{}' not found".format(parsedargs.runset))
-            return
-        ts = tsrow[0]['TimeStamp']
-
-        querystr = """SELECT Path, ParamID, Value FROM simunator_sims
-                         INNER JOIN simunator_param_vals ON
-                         simunator_sims.SimID=simunator_param_vals.SimID
-                         WHERE simunator_sims.RunsetID = {}""".format(parsedargs.runset)
-        rows = self.dssc.read_rows_sql(querystr)
-        for row in rows:
-            path = row["Path"]
-            parammap = {**row, "SIM_DATE": ts}
+        cmd = self.get_commands_from_runset(parsedargs.runset, 'simunator_commands', parsedargs.command)
+        cmdtemplate = Template(cmd["Template"])
+        ts = self.get_timestamp_from_runset(parsedargs.runset)
+        sims = self.get_sims_from_runset(parsedargs.runset)
+        for sim in sims:
+            path = sim["Path"]
+            parammap = {**sim, "SIM_DATE": ts}
             cmd = cmdtemplate.render(**parammap)
             print("cd '{path}'; {cmd}".format(path=path, cmd=cmd), file=outfile)
 
     def create(self, args):
-        import yaml
-
         parser = argparse.ArgumentParser(description="Generate simulation hiearchy data.")
         parser.add_argument("config", type=str, help="Config file for Simunator.")
         parsedargs = parser.parse_args(args)
@@ -147,7 +155,6 @@ class Simunator:
             self.inputconfig = yaml.load(f, Loader=yaml.FullLoader)
 
         self.currtime = str(datetime.datetime.now().replace(microsecond=0))
-        print(self.currtime)
 
         self.gen_param_sets()
         self.gen_template_strings()
@@ -174,7 +181,7 @@ class Simunator:
 
     def collect(self, args):
         parser = argparse.ArgumentParser(description="Collect simulation batch.")
-        parser.add_argument("timestamp", type=str, help="Timestamp to process")
+        parser.add_argument("runset", type=str, help="RunsetID to process")
         parser.add_argument(
             "--collector",
             type=str,
@@ -184,36 +191,22 @@ class Simunator:
         )
         parsedargs = parser.parse_args(args)
 
-        self.get_db()
-
-        self.c.execute("SELECT *,rowid from '{0}';".format(parsedargs.timestamp))
-        sims = self.c.fetchall()
-        paramlist = sims[0].keys()
-
         if parsedargs.collector:
-            self.c.execute(
-                "SELECT cmdname, cmdtemplate FROM simunator_collectors WHERE cmdname == ?;",
-                (parsedargs.collector, ),
-            )
-            cmdpairs = self.c.fetchall()
+            collectors = [
+                self.get_commands_from_runset(parsedargs.runset, "simunator_collectors", parsedargs.collector)
+            ]
         else:
-            self.c.execute("SELECT cmdname, cmdtemplate FROM simunator_collectors;")
-            cmdpairs = self.c.fetchall()
+            collectors = self.get_commands_from_runset(parsedargs.runset, "simunator_collectors")
 
-        import subprocess
-        import io
+        sims = self.get_sims_from_runset(parsedargs.runset)
+        ts = self.get_timestamp_from_runset(parsedargs.runset)
 
-        for paramvals in sims:
-            parammap = {
-                **dict(zip(paramlist, paramvals)),
-                **{
-                    "SIM_DATE": parsedargs.timestamp
-                },
-            }
-            path = os.path.join(os.getcwd(), parammap["SIM_PATH"])
-            for cmdpair in cmdpairs:
-                var, cmdtemplate = cmdpair
-                cmd = Template(cmdtemplate).render(**parammap)
+        for sim in sims:
+            path = sim["Path"]
+            parammap = {**sim, "SIM_DATE": ts}
+            for cmdpair in collectors:
+                name, templatestr = cmdpair['Name'], cmdpair['Template']
+                cmd = Template(templatestr).render(**parammap)
                 result = subprocess.run(cmd, cwd=path, stdout=subprocess.PIPE, shell=True)
 
                 val = np.loadtxt(io.StringIO(result.stdout.decode("utf-8")), delimiter=" ")
@@ -221,11 +214,13 @@ class Simunator:
                 # FIXME: The type of the column should set this, not the parsed result
                 val = float(val) if val.size == 1 else val
 
-                exectemplate = "UPDATE '{0}' SET '{1}' = ? where rowid == ?;".format(parsedargs.timestamp, var)
-                self.c.execute(exectemplate, (
-                    val,
-                    paramvals["rowid"],
-                ))
+                self.dssc.execute("REPLACE INTO simunator_result_vals (Name, SimID, Value) VALUES('{}', {}, {})".format(
+                    name, sim["SimID"], val))
+        # doltpy doesn't like having ' character in commits for some dumb reason
+        if not self.dssc.dolt.status().is_clean:
+            commit_string = "Collect data with collectors: {}".format([row['Name']
+                                                                       for row in collectors]).replace("'", '"')
+            self.dssc.commit_tables(commit_string)
 
     def gen_param_sets(self):
         """Creates a parammaker object that generates all unique combinations of
@@ -248,20 +243,19 @@ class Simunator:
         faithful reproduction of simulation run information.
         """
         tables = [row['Table'] for row in self.dssc.read_rows_sql("SHOW TABLES")]
-        # tables = [table.name for table in self.db.ls()]
 
         self.dssc.execute("""CREATE TABLE IF NOT EXISTS simunator_commands
-                              (CmdName VARCHAR(256) NOT NULL,
-                               CmdTemplate LONGTEXT NOT NULL,
-                               PRIMARY KEY (CmdName));""")
+                              (Name VARCHAR(256) NOT NULL,
+                               Template LONGTEXT NOT NULL,
+                               PRIMARY KEY (Name));""")
         self.dssc.execute("""CREATE TABLE IF NOT EXISTS simunator_collectors
-                              (CollectorID VARCHAR(256) NOT NULL,
-                               CmdTemplate LONGTEXT NOT NULL,
-                               PRIMARY KEY (CollectorID));""")
-        self.dssc.execute(
-            "CREATE TABLE IF NOT EXISTS simunator_params (ParamID VARCHAR(256) NOT NULL, ParamType VARCHAR(256), PRIMARY KEY (ParamID));"
-        )
-        #
+                              (Name VARCHAR(256) NOT NULL,
+                               Template LONGTEXT NOT NULL,
+                               PRIMARY KEY (Name));""")
+        self.dssc.execute("""CREATE TABLE IF NOT EXISTS simunator_params
+                   (ParamID VARCHAR(256) NOT NULL,
+                    ParamType VARCHAR(256),
+                    PRIMARY KEY (ParamID))""")
         if "simunator_runsets" not in tables:
             self.dssc.execute("""CREATE TABLE IF NOT EXISTS simunator_runsets
                                   (RunsetID INTEGER AUTO_INCREMENT,
@@ -290,11 +284,11 @@ class Simunator:
                                            ON DELETE CASCADE)""")
         if "simunator_result_vals" not in tables:
             self.dssc.execute("""CREATE TABLE simunator_result_vals
-                                  (CollectorID VARCHAR(256),
+                                  (Name VARCHAR(256),
                                    SimID INT,
                                    Value DOUBLE PRECISION,
-                                   PRIMARY KEY (CollectorID, SimID),
-                                   FOREIGN KEY (CollectorID) REFERENCES simunator_collectors(CollectorID),
+                                   PRIMARY KEY (Name, SimID),
+                                   FOREIGN KEY (Name) REFERENCES simunator_collectors(Name),
                                    FOREIGN KEY (SimID) REFERENCES simunator_sims(SimID)
                                            ON DELETE CASCADE)""")
 
@@ -309,13 +303,13 @@ class Simunator:
         print("Added runset: {}".format(self.runset_id))
 
     def add_commands(self):
-        rows = [{'CmdName': name, 'CmdTemplate': cmd} for name, cmd in self.inputconfig["system"]["commands"].items()]
+        rows = [{'Name': name, 'Template': cmd} for name, cmd in self.inputconfig["system"]["commands"].items()]
         self.dssc.write_rows("simunator_commands", rows)
 
     def add_collectors(self):
         rows = [{
-            'CollectorID': name,
-            'CmdTemplate': template
+            'Name': name,
+            'Template': template
         } for name, template in self.inputconfig["system"]["collectors"].items()]
         self.dssc.write_rows("simunator_collectors", rows)
 
